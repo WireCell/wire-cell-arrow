@@ -426,4 +426,71 @@ to_arrow_sparse(const WireCell::IFrame::pointer& frame)
     return out;
 }
 
+bool is_dense(const WireCell::IFrame::pointer& frame)
+{
+    auto traces = frame->traces();
+    if (!traces || traces->empty()) return true;   // vacuously dense
+    const size_t T = (*traces)[0]->charge().size();
+    const int tbin = (*traces)[0]->tbin();
+    for (const auto& t : *traces) {
+        if (t->charge().size() != T) return false;
+        if (t->tbin() != tbin) return false;
+    }
+    return true;
+}
+
+arrow::Result<FrameTables>
+to_arrow_dense(const WireCell::IFrame::pointer& frame)
+{
+    if (!is_dense(frame)) {
+        return arrow::Status::Invalid("to_arrow_dense: frame is not dense "
+                                      "(traces differ in sample count or tbin)");
+    }
+    auto* pool = arrow::default_memory_pool();
+
+    auto traces = frame->traces();
+    const int64_t nrows = traces ? static_cast<int64_t>(traces->size()) : 0;
+    int32_t nticks = 0, tbin = 0;
+    if (traces && !traces->empty()) {
+        nticks = static_cast<int32_t>((*traces)[0]->charge().size());
+        tbin   = (*traces)[0]->tbin();
+    }
+
+    arrow::Int32Builder channel_b(pool);
+    auto charge_vb = std::make_shared<arrow::FloatBuilder>(pool);
+    arrow::FixedSizeListBuilder charge_b(pool, charge_vb, nticks);
+
+    if (traces) {
+        for (const auto& t : *traces) {
+            ARROW_RETURN_NOT_OK(channel_b.Append(t->channel()));
+            ARROW_RETURN_NOT_OK(charge_b.Append());   // expects exactly nticks values
+            const auto& q = t->charge();
+            ARROW_RETURN_NOT_OK(charge_vb->AppendValues(q.data(), static_cast<int64_t>(q.size())));
+        }
+    }
+
+    std::shared_ptr<arrow::Array> a_channel, a_charge;
+    ARROW_RETURN_NOT_OK(channel_b.Finish(&a_channel));
+    ARROW_RETURN_NOT_OK(charge_b.Finish(&a_charge));
+
+    auto md = frame_metadata("wc.frame.dense", frame);
+    md = md->Merge(*arrow::key_value_metadata({
+        {"wc.frame.tbin",   std::to_string(tbin)},
+        {"wc.frame.nticks", std::to_string(nticks)},
+    }));
+    auto schema = arrow::schema(
+        {
+            arrow::field("wc.trace.channel", arrow::int32(), false),
+            arrow::field("wc.trace.charge",  arrow::fixed_size_list(arrow::float32(), nticks), false),
+        },
+        md);
+
+    FrameTables out;
+    out.traces = arrow::Table::Make(schema, {a_channel, a_charge}, nrows);
+    ARROW_ASSIGN_OR_RAISE(out.frame_tags, build_frame_tags(frame));
+    ARROW_ASSIGN_OR_RAISE(out.trace_tags, build_trace_tags(frame));
+    ARROW_ASSIGN_OR_RAISE(out.cmm,        build_cmm(frame));
+    return out;
+}
+
 }  // namespace WireCell::Arrow

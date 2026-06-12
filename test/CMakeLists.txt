@@ -79,5 +79,14 @@ target_link_libraries(test_frame_sparse_converter PRIVATE wire_cell_arrow
   ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME frame_sparse_converter COMMAND test_frame_sparse_converter)
 
+# wc.frame dense converter (ddm-one): is_dense + to_arrow_dense.
+add_executable(test_frame_dense_converter test_frame_dense_converter.cpp)
+target_link_libraries(test_frame_dense_converter PRIVATE wire_cell_arrow
+  Arrow::arrow_shared
+  WireCell::Aux
+  WireCell::Util
+  ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME frame_dense_converter COMMAND test_frame_dense_converter)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.

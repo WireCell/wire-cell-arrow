@@ -116,6 +116,20 @@ struct FrameTables {
 arrow::Result<FrameTables>
 to_arrow_sparse(const WireCell::IFrame::pointer& frame);
 
+/// True if the frame can be stored densely: every trace has the same charge
+/// length AND the same tbin (a rectangular block).  An empty frame is dense.
+/// Dense storage hoists the common tbin into metadata, so a uniform tbin is
+/// required (not just a uniform sample count).
+bool is_dense(const WireCell::IFrame::pointer& frame);
+
+/// Convert a dense IFrame to its wc.frame.dense bundle: one row per channel,
+/// charge as fixed_size_list<float32>[nticks]; the common tbin and nticks live
+/// in the traces-table schema metadata (arrow.schema=wc.frame.dense) alongside
+/// ident/time/tick.  Tags/CMM companion tables are identical to the sparse
+/// form.  Returns Status::Invalid if the frame is not dense.
+arrow::Result<FrameTables>
+to_arrow_dense(const WireCell::IFrame::pointer& frame);
+
 }  // namespace WireCell::Arrow
 
 #endif  // WIRE_CELL_ARROW_CONVERTERS_H
