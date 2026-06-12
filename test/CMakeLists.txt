@@ -61,5 +61,14 @@ target_link_libraries(test_tensor_converter PRIVATE wire_cell_arrow
   ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME tensor_converter COMMAND test_tensor_converter)
 
+# ArrowTensor facade round-trip (ddm-4zr): ITensor -> Arrow -> ITensor.
+add_executable(test_arrow_tensor test_arrow_tensor.cpp)
+target_link_libraries(test_arrow_tensor PRIVATE wire_cell_arrow
+  Arrow::arrow_shared
+  WireCell::Aux
+  WireCell::Util
+  ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME arrow_tensor COMMAND test_arrow_tensor)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.
