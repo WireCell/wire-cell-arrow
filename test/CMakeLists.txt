@@ -100,5 +100,11 @@ target_link_libraries(test_tensorset_converter PRIVATE wire_cell_arrow
   Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME tensorset_converter COMMAND test_tensorset_converter)
 
+# ArrowFrame facade round-trip (ddm-c2g): IFrame -> Arrow -> IFrame (sparse+dense).
+add_executable(test_arrow_frame test_arrow_frame.cpp)
+target_link_libraries(test_arrow_frame PRIVATE wire_cell_arrow
+  Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME arrow_frame COMMAND test_arrow_frame)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.

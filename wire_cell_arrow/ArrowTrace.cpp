@@ -5,25 +5,6 @@
 
 namespace WireCell::Arrow {
 
-namespace {
-// Resolve a column by name and downcast, or throw with a clear message.
-template <typename ArrayType>
-std::shared_ptr<ArrayType> typed_column(const std::shared_ptr<arrow::RecordBatch>& batch,
-                                        const std::string& name,
-                                        arrow::Type::type expected)
-{
-    auto col = batch->GetColumnByName(name);
-    if (!col) {
-        throw std::invalid_argument("ArrowTrace: missing column '" + name + "'");
-    }
-    if (col->type_id() != expected) {
-        throw std::invalid_argument("ArrowTrace: column '" + name + "' has unexpected type "
-                                    + col->type()->ToString());
-    }
-    return std::static_pointer_cast<ArrayType>(col);
-}
-}  // namespace
-
 ArrowTrace::ArrowTrace(std::shared_ptr<arrow::RecordBatch> batch, int64_t row)
   : m_batch(std::move(batch))
   , m_row(row)
@@ -32,12 +13,44 @@ ArrowTrace::ArrowTrace(std::shared_ptr<arrow::RecordBatch> batch, int64_t row)
         throw std::invalid_argument("ArrowTrace: null batch");
     }
     if (m_row < 0 || m_row >= m_batch->num_rows()) {
-        throw std::invalid_argument("ArrowTrace: row " + std::to_string(m_row)
-                                    + " out of range");
+        throw std::invalid_argument("ArrowTrace: row " + std::to_string(m_row) + " out of range");
     }
-    m_channel     = typed_column<arrow::Int32Array>(m_batch, "wc.trace.channel", arrow::Type::INT32);
-    m_tbin        = typed_column<arrow::Int32Array>(m_batch, "wc.trace.tbin",    arrow::Type::INT32);
-    m_charge_list = typed_column<arrow::ListArray>(m_batch,  "wc.trace.charge",  arrow::Type::LIST);
+
+    auto chan = m_batch->GetColumnByName("wc.trace.channel");
+    if (!chan || chan->type_id() != arrow::Type::INT32) {
+        throw std::invalid_argument("ArrowTrace: missing/bad wc.trace.channel column");
+    }
+    m_channel = std::static_pointer_cast<arrow::Int32Array>(chan);
+
+    // tbin: per-row column (sparse) or, if absent, the constant from the dense
+    // frame's schema metadata (wc.frame.tbin).
+    auto tcol = m_batch->GetColumnByName("wc.trace.tbin");
+    if (tcol) {
+        if (tcol->type_id() != arrow::Type::INT32) {
+            throw std::invalid_argument("ArrowTrace: wc.trace.tbin has wrong type");
+        }
+        m_tbin_col = std::static_pointer_cast<arrow::Int32Array>(tcol);
+    } else {
+        auto md = m_batch->schema()->metadata();
+        if (md) {
+            auto got = md->Get("wc.frame.tbin");
+            if (got.ok()) m_tbin_const = std::stoi(*got);
+        }
+    }
+
+    auto chg = m_batch->GetColumnByName("wc.trace.charge");
+    if (!chg) {
+        throw std::invalid_argument("ArrowTrace: missing wc.trace.charge column");
+    }
+    if (chg->type_id() == arrow::Type::LIST) {
+        m_charge_fixed = false;
+    } else if (chg->type_id() == arrow::Type::FIXED_SIZE_LIST) {
+        m_charge_fixed = true;
+    } else {
+        throw std::invalid_argument("ArrowTrace: wc.trace.charge has wrong type "
+                                    + chg->type()->ToString());
+    }
+    m_charge = chg;
 }
 
 ArrowTrace::~ArrowTrace() {}
@@ -49,20 +62,24 @@ int ArrowTrace::channel() const
 
 int ArrowTrace::tbin() const
 {
-    return m_tbin->Value(m_row);
+    return m_tbin_col ? m_tbin_col->Value(m_row) : m_tbin_const;
 }
 
 const ITrace::ChargeSequence& ArrowTrace::charge() const
 {
     if (!m_charge_loaded) {
-        // value_slice returns the child values for this list element as a slice
-        // whose raw_values() already accounts for the slice offset.
-        auto slice = std::static_pointer_cast<arrow::FloatArray>(m_charge_list->value_slice(m_row));
-        const float* p = slice->raw_values();
-        m_charge.assign(p, p + slice->length());
+        std::shared_ptr<arrow::Array> slice;
+        if (m_charge_fixed) {
+            slice = std::static_pointer_cast<arrow::FixedSizeListArray>(m_charge)->value_slice(m_row);
+        } else {
+            slice = std::static_pointer_cast<arrow::ListArray>(m_charge)->value_slice(m_row);
+        }
+        auto fa = std::static_pointer_cast<arrow::FloatArray>(slice);
+        const float* p = fa->raw_values();
+        m_charge_cache.assign(p, p + fa->length());
         m_charge_loaded = true;
     }
-    return m_charge;
+    return m_charge_cache;
 }
 
 }  // namespace WireCell::Arrow
