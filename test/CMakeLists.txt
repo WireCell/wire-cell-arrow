@@ -44,5 +44,13 @@ target_link_libraries(test_depo_converter PRIVATE wire_cell_arrow
   ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME depo_converter COMMAND test_depo_converter)
 
+# ArrowDepo facade round-trip (ddm-fod): IDepo -> Arrow -> IDepo incl. prior chain.
+add_executable(test_arrow_depo test_arrow_depo.cpp)
+target_link_libraries(test_arrow_depo PRIVATE wire_cell_arrow
+  Arrow::arrow_shared
+  WireCell::Aux
+  ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME arrow_depo COMMAND test_arrow_depo)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.
