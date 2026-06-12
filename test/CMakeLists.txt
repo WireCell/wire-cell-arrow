@@ -112,5 +112,17 @@ target_link_libraries(test_arrow_sets PRIVATE wire_cell_arrow
   Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME arrow_sets COMMAND test_arrow_sets)
 
+# Schema-definition validation (ddm-ppo).
+add_executable(test_schemas test_schemas.cpp)
+target_link_libraries(test_schemas PRIVATE wire_cell_arrow
+  Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME schemas COMMAND test_schemas)
+
+# Consolidated round-trip tests (ddm-5zj) using test_helpers.h (ddm-c0l).
+add_executable(test_roundtrip test_roundtrip.cpp)
+target_link_libraries(test_roundtrip PRIVATE wire_cell_arrow
+  Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME roundtrip COMMAND test_roundtrip)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.
