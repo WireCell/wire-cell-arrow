@@ -10,7 +10,7 @@
 
 int main()
 {
-    const char* v = wire_cell::arrow::version();
+    const char* v = WireCell::Arrow::version();
     if (v == nullptr || std::strlen(v) == 0) {
         std::cerr << "wire_cell_arrow::version() returned empty\n";
         return 1;
