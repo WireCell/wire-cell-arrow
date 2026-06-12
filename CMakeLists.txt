@@ -65,6 +65,8 @@ add_library(wire_cell_arrow SHARED
   wire_cell_arrow/ArrowDepo.cpp
   wire_cell_arrow/ArrowTensor.cpp
   wire_cell_arrow/ArrowFrame.cpp
+  wire_cell_arrow/ArrowDepoSet.cpp
+  wire_cell_arrow/ArrowTensorSet.cpp
 )
 
 target_compile_definitions(wire_cell_arrow

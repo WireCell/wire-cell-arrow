@@ -354,6 +354,20 @@ double parse_hexfloat(const std::string& s)
     return v;
 }
 
+arrow::Result<std::shared_ptr<arrow::RecordBatch>>
+table_to_batch(const std::shared_ptr<arrow::Table>& table)
+{
+    ARROW_ASSIGN_OR_RAISE(auto combined, table->CombineChunks());
+    if (combined->num_rows() == 0) {
+        return arrow::RecordBatch::MakeEmpty(combined->schema());
+    }
+    std::vector<std::shared_ptr<arrow::Array>> arrays;
+    for (const auto& col : combined->columns()) {
+        arrays.push_back(col->chunk(0));
+    }
+    return arrow::RecordBatch::Make(combined->schema(), combined->num_rows(), arrays);
+}
+
 namespace {
 
 // Frame-scalar schema metadata: arrow.schema + ident/time/tick (time/tick as

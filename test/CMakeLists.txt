@@ -106,5 +106,11 @@ target_link_libraries(test_arrow_frame PRIVATE wire_cell_arrow
   Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME arrow_frame COMMAND test_arrow_frame)
 
+# Set facade round-trips (ddm-5vm ArrowDepoSet, ddm-2c4 ArrowTensorSet).
+add_executable(test_arrow_sets test_arrow_sets.cpp)
+target_link_libraries(test_arrow_sets PRIVATE wire_cell_arrow
+  Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME arrow_sets COMMAND test_arrow_sets)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.

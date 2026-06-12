@@ -8,20 +8,6 @@ namespace WireCell::Arrow {
 
 namespace {
 
-// Collapse a (single-chunk) Table into one RecordBatch.
-std::shared_ptr<arrow::RecordBatch> table_to_batch(const std::shared_ptr<arrow::Table>& t)
-{
-    auto combined = t->CombineChunks().ValueOrDie();
-    if (combined->num_rows() == 0) {
-        return arrow::RecordBatch::MakeEmpty(combined->schema()).ValueOrDie();
-    }
-    std::vector<std::shared_ptr<arrow::Array>> arrays;
-    for (const auto& col : combined->columns()) {
-        arrays.push_back(col->chunk(0));
-    }
-    return arrow::RecordBatch::Make(combined->schema(), combined->num_rows(), arrays);
-}
-
 std::string meta_get(const std::shared_ptr<arrow::RecordBatch>& b, const std::string& key)
 {
     auto md = b->schema()->metadata();
@@ -38,7 +24,9 @@ ArrowFrame::ArrowFrame(FrameTables tables)
     if (!m_tables.traces) {
         throw std::invalid_argument("ArrowFrame: null traces table");
     }
-    m_trace_batch = table_to_batch(m_tables.traces);
+    auto br = table_to_batch(m_tables.traces);
+    if (!br.ok()) throw std::runtime_error("ArrowFrame: " + br.status().ToString());
+    m_trace_batch = *br;
 
     // Frame scalars from schema metadata.
     const std::string sid = meta_get(m_trace_batch, "wc.frame.ident");

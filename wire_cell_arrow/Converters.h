@@ -114,6 +114,12 @@ to_arrow(const WireCell::ITensorSet::pointer& tensorset);
 std::string hexfloat(double v);
 double parse_hexfloat(const std::string& s);
 
+/// Collapse a (typically single-chunk) Table into one RecordBatch, preserving
+/// schema metadata.  Used by the set/frame facades to index rows.  A 0-row
+/// table yields an empty batch.
+arrow::Result<std::shared_ptr<arrow::RecordBatch>>
+table_to_batch(const std::shared_ptr<arrow::Table>& table);
+
 /// A wc.frame as a bundle of standalone Arrow tables (per the ddm-li8 decision):
 ///   traces     : the wc.frame / wc.frame.dense trace table (frame scalars
 ///                ident/time/tick live in its schema metadata)
