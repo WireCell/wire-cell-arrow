@@ -52,5 +52,14 @@ target_link_libraries(test_arrow_depo PRIVATE wire_cell_arrow
   ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME arrow_depo COMMAND test_arrow_depo)
 
+# wc.tensor converter unit test (ddm-d5c): to_arrow(ITensor).
+add_executable(test_tensor_converter test_tensor_converter.cpp)
+target_link_libraries(test_tensor_converter PRIVATE wire_cell_arrow
+  Arrow::arrow_shared
+  WireCell::Aux
+  WireCell::Util
+  ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME tensor_converter COMMAND test_tensor_converter)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.

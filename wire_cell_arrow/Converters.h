@@ -3,6 +3,7 @@
 
 #include "WireCellIface/ITrace.h"
 #include "WireCellIface/IDepo.h"
+#include "WireCellIface/ITensor.h"
 
 #include <arrow/api.h>
 
@@ -59,6 +60,25 @@ std::shared_ptr<arrow::Schema> depo_schema();
 /// WCT numpy serialization).
 arrow::Result<std::shared_ptr<arrow::RecordBatch>>
 to_arrow(const WireCell::IDepo::pointer& depo);
+
+/// The canonical Arrow schema for a wc.tensor RecordBatch: one row per tensor.
+///
+/// Columns: wc.tensor.data large_binary (non-null), wc.tensor.dtype utf8
+/// (non-null), wc.tensor.shape list<int64> (non-null), wc.tensor.order
+/// list<int64> (non-null, empty = C order), wc.tensor.metadata utf8 (nullable).
+/// Schema metadata arrow.schema = "wc.tensor".  This same column set is reused
+/// as the rows of wc.tensorset.
+std::shared_ptr<arrow::Schema> tensor_schema();
+
+/// Convert a single ITensor to a one-row RecordBatch conforming to wc.tensor.
+///
+/// The raw byte buffer (ITensor::data(), size() bytes) is copied verbatim into
+/// a large_binary value; dtype/shape/order go to their columns and metadata()
+/// is serialized to JSON (null when empty).  Note: per the ddm-x29 decision
+/// these are COLUMNS, not schema metadata (the issue text predates that
+/// decision).
+arrow::Result<std::shared_ptr<arrow::RecordBatch>>
+to_arrow(const WireCell::ITensor::pointer& tensor);
 
 }  // namespace WireCell::Arrow
 

@@ -1,5 +1,7 @@
 #include "wire_cell_arrow/Converters.h"
 
+#include "WireCellUtil/Persist.h"
+
 namespace WireCell::Arrow {
 
 std::shared_ptr<arrow::Schema> trace_schema()
@@ -180,6 +182,75 @@ to_arrow(const WireCell::IDepo::pointer& depo)
 
     return arrow::RecordBatch::Make(depo_schema(), /*num_rows=*/1,
         {a_time, a_charge, a_energy, a_x, a_y, a_z, a_el, a_et, a_id, a_pdg, a_priors});
+}
+
+// ---------------------------------------------------------------------------
+// wc.tensor
+// ---------------------------------------------------------------------------
+
+std::shared_ptr<arrow::Schema> tensor_schema()
+{
+    auto md = arrow::key_value_metadata({{"arrow.schema", "wc.tensor"}});
+    return arrow::schema(
+        {
+            arrow::field("wc.tensor.data",     arrow::large_binary(),       /*nullable=*/false),
+            arrow::field("wc.tensor.dtype",    arrow::utf8(),               false),
+            arrow::field("wc.tensor.shape",    arrow::list(arrow::int64()), false),
+            arrow::field("wc.tensor.order",    arrow::list(arrow::int64()), false),
+            arrow::field("wc.tensor.metadata", arrow::utf8(),               /*nullable=*/true),
+        },
+        md);
+}
+
+arrow::Result<std::shared_ptr<arrow::RecordBatch>>
+to_arrow(const WireCell::ITensor::pointer& tensor)
+{
+    auto* pool = arrow::default_memory_pool();
+
+    arrow::LargeBinaryBuilder data_b(pool);
+    arrow::StringBuilder dtype_b(pool);
+    auto shape_vb = std::make_shared<arrow::Int64Builder>(pool);
+    arrow::ListBuilder shape_b(pool, shape_vb);
+    auto order_vb = std::make_shared<arrow::Int64Builder>(pool);
+    arrow::ListBuilder order_b(pool, order_vb);
+    arrow::StringBuilder meta_b(pool);
+
+    // data: raw bytes copied verbatim.
+    const auto nbytes = static_cast<int64_t>(tensor->size());
+    if (nbytes > 0) {
+        ARROW_RETURN_NOT_OK(data_b.Append(reinterpret_cast<const uint8_t*>(tensor->data()), nbytes));
+    } else {
+        ARROW_RETURN_NOT_OK(data_b.AppendEmptyValue());  // non-null, zero-length
+    }
+
+    ARROW_RETURN_NOT_OK(dtype_b.Append(tensor->dtype()));
+
+    ARROW_RETURN_NOT_OK(shape_b.Append());
+    for (auto s : tensor->shape()) {
+        ARROW_RETURN_NOT_OK(shape_vb->Append(static_cast<int64_t>(s)));
+    }
+
+    ARROW_RETURN_NOT_OK(order_b.Append());
+    for (auto o : tensor->order()) {     // empty => C order
+        ARROW_RETURN_NOT_OK(order_vb->Append(static_cast<int64_t>(o)));
+    }
+
+    auto cfg = tensor->metadata();
+    if (cfg.isNull()) {
+        ARROW_RETURN_NOT_OK(meta_b.AppendNull());
+    } else {
+        ARROW_RETURN_NOT_OK(meta_b.Append(WireCell::Persist::dumps(cfg)));
+    }
+
+    std::shared_ptr<arrow::Array> a_data, a_dtype, a_shape, a_order, a_meta;
+    ARROW_RETURN_NOT_OK(data_b.Finish(&a_data));
+    ARROW_RETURN_NOT_OK(dtype_b.Finish(&a_dtype));
+    ARROW_RETURN_NOT_OK(shape_b.Finish(&a_shape));
+    ARROW_RETURN_NOT_OK(order_b.Finish(&a_order));
+    ARROW_RETURN_NOT_OK(meta_b.Finish(&a_meta));
+
+    return arrow::RecordBatch::Make(tensor_schema(), /*num_rows=*/1,
+                                    {a_data, a_dtype, a_shape, a_order, a_meta});
 }
 
 }  // namespace WireCell::Arrow
