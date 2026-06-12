@@ -70,5 +70,14 @@ target_link_libraries(test_arrow_tensor PRIVATE wire_cell_arrow
   ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME arrow_tensor COMMAND test_arrow_tensor)
 
+# wc.frame sparse converter (ddm-0ow): to_arrow_sparse(IFrame) bundle.
+add_executable(test_frame_sparse_converter test_frame_sparse_converter.cpp)
+target_link_libraries(test_frame_sparse_converter PRIVATE wire_cell_arrow
+  Arrow::arrow_shared
+  WireCell::Aux
+  WireCell::Util
+  ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME frame_sparse_converter COMMAND test_frame_sparse_converter)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.

@@ -2,6 +2,8 @@
 
 #include "WireCellUtil/Persist.h"
 
+#include <charconv>
+
 namespace WireCell::Arrow {
 
 std::shared_ptr<arrow::Schema> trace_schema()
@@ -251,6 +253,177 @@ to_arrow(const WireCell::ITensor::pointer& tensor)
 
     return arrow::RecordBatch::Make(tensor_schema(), /*num_rows=*/1,
                                     {a_data, a_dtype, a_shape, a_order, a_meta});
+}
+
+// ---------------------------------------------------------------------------
+// wc.frame
+// ---------------------------------------------------------------------------
+
+std::string hexfloat(double v)
+{
+    char buf[64];
+    auto [p, ec] = std::to_chars(buf, buf + sizeof(buf), v, std::chars_format::hex);
+    return std::string(buf, p);
+}
+
+double parse_hexfloat(const std::string& s)
+{
+    double v = 0.0;
+    std::from_chars(s.data(), s.data() + s.size(), v, std::chars_format::hex);
+    return v;
+}
+
+namespace {
+
+// Frame-scalar schema metadata: arrow.schema + ident/time/tick (time/tick as
+// bit-exact hexfloat).
+std::shared_ptr<arrow::KeyValueMetadata> frame_metadata(const std::string& schema_name,
+                                                        const WireCell::IFrame::pointer& f)
+{
+    return arrow::key_value_metadata({
+        {"arrow.schema",   schema_name},
+        {"wc.frame.ident", std::to_string(f->ident())},
+        {"wc.frame.time",  hexfloat(f->time())},
+        {"wc.frame.tick",  hexfloat(f->tick())},
+    });
+}
+
+// wc.frame.frame_tags : one row per frame tag.
+arrow::Result<std::shared_ptr<arrow::Table>> build_frame_tags(const WireCell::IFrame::pointer& f)
+{
+    arrow::StringBuilder tag_b;
+    for (const auto& t : f->frame_tags()) {
+        ARROW_RETURN_NOT_OK(tag_b.Append(t));
+    }
+    std::shared_ptr<arrow::Array> a;
+    ARROW_RETURN_NOT_OK(tag_b.Finish(&a));
+    auto schema = arrow::schema(
+        {arrow::field("wc.frame.frame_tags.tag", arrow::utf8(), false)},
+        arrow::key_value_metadata({{"arrow.schema", "wc.frame.frame_tags"}}));
+    return arrow::Table::Make(schema, {a});
+}
+
+// wc.frame.trace_tags : one row per trace tag; trace_index list<int64>,
+// summary list<float64> (null when the tag has no summary).
+arrow::Result<std::shared_ptr<arrow::Table>> build_trace_tags(const WireCell::IFrame::pointer& f)
+{
+    auto* pool = arrow::default_memory_pool();
+    arrow::StringBuilder tag_b(pool);
+    auto ti_vb = std::make_shared<arrow::Int64Builder>(pool);
+    arrow::ListBuilder ti_b(pool, ti_vb);
+    auto sm_vb = std::make_shared<arrow::DoubleBuilder>(pool);
+    arrow::ListBuilder sm_b(pool, sm_vb);
+
+    for (const auto& tag : f->trace_tags()) {
+        ARROW_RETURN_NOT_OK(tag_b.Append(tag));
+
+        ARROW_RETURN_NOT_OK(ti_b.Append());
+        for (auto idx : f->tagged_traces(tag)) {
+            ARROW_RETURN_NOT_OK(ti_vb->Append(static_cast<int64_t>(idx)));
+        }
+
+        const auto& summary = f->trace_summary(tag);
+        if (summary.empty()) {
+            ARROW_RETURN_NOT_OK(sm_b.AppendNull());
+        } else {
+            ARROW_RETURN_NOT_OK(sm_b.Append());
+            ARROW_RETURN_NOT_OK(sm_vb->AppendValues(summary.data(),
+                                                    static_cast<int64_t>(summary.size())));
+        }
+    }
+
+    std::shared_ptr<arrow::Array> a_tag, a_ti, a_sm;
+    ARROW_RETURN_NOT_OK(tag_b.Finish(&a_tag));
+    ARROW_RETURN_NOT_OK(ti_b.Finish(&a_ti));
+    ARROW_RETURN_NOT_OK(sm_b.Finish(&a_sm));
+    auto schema = arrow::schema(
+        {
+            arrow::field("wc.frame.trace_tags.tag",         arrow::utf8(),                 false),
+            arrow::field("wc.frame.trace_tags.trace_index", arrow::list(arrow::int64()),   false),
+            arrow::field("wc.frame.trace_tags.summary",     arrow::list(arrow::float64()), /*nullable=*/true),
+        },
+        arrow::key_value_metadata({{"arrow.schema", "wc.frame.trace_tags"}}));
+    return arrow::Table::Make(schema, {a_tag, a_ti, a_sm});
+}
+
+// wc.frame.cmm : flattened ChannelMaskMap, one row per (label, channel, range);
+// half-open [bin_start, bin_end).  0 rows when the CMM is empty.
+arrow::Result<std::shared_ptr<arrow::Table>> build_cmm(const WireCell::IFrame::pointer& f)
+{
+    arrow::StringBuilder label_b;
+    arrow::Int32Builder chan_b, lo_b, hi_b;
+
+    for (const auto& [label, chmasks] : f->masks()) {
+        for (const auto& [chan, ranges] : chmasks) {
+            for (const auto& range : ranges) {
+                ARROW_RETURN_NOT_OK(label_b.Append(label));
+                ARROW_RETURN_NOT_OK(chan_b.Append(chan));
+                ARROW_RETURN_NOT_OK(lo_b.Append(range.first));
+                ARROW_RETURN_NOT_OK(hi_b.Append(range.second));
+            }
+        }
+    }
+
+    std::shared_ptr<arrow::Array> a_label, a_chan, a_lo, a_hi;
+    ARROW_RETURN_NOT_OK(label_b.Finish(&a_label));
+    ARROW_RETURN_NOT_OK(chan_b.Finish(&a_chan));
+    ARROW_RETURN_NOT_OK(lo_b.Finish(&a_lo));
+    ARROW_RETURN_NOT_OK(hi_b.Finish(&a_hi));
+    auto schema = arrow::schema(
+        {
+            arrow::field("wc.frame.cmm.label",     arrow::utf8(),  false),
+            arrow::field("wc.frame.cmm.channel",   arrow::int32(), false),
+            arrow::field("wc.frame.cmm.bin_start", arrow::int32(), false),
+            arrow::field("wc.frame.cmm.bin_end",   arrow::int32(), false),
+        },
+        arrow::key_value_metadata({{"arrow.schema", "wc.frame.cmm"}}));
+    return arrow::Table::Make(schema, {a_label, a_chan, a_lo, a_hi});
+}
+
+}  // namespace
+
+arrow::Result<FrameTables>
+to_arrow_sparse(const WireCell::IFrame::pointer& frame)
+{
+    auto* pool = arrow::default_memory_pool();
+
+    arrow::Int32Builder channel_b(pool), tbin_b(pool);
+    auto charge_vb = std::make_shared<arrow::FloatBuilder>(pool);
+    arrow::ListBuilder charge_b(pool, charge_vb);
+
+    auto traces = frame->traces();
+    const int64_t nrows = traces ? static_cast<int64_t>(traces->size()) : 0;
+    if (traces) {
+        for (const auto& t : *traces) {
+            ARROW_RETURN_NOT_OK(channel_b.Append(t->channel()));
+            ARROW_RETURN_NOT_OK(tbin_b.Append(t->tbin()));
+            ARROW_RETURN_NOT_OK(charge_b.Append());
+            const auto& q = t->charge();
+            if (!q.empty()) {
+                ARROW_RETURN_NOT_OK(charge_vb->AppendValues(q.data(), static_cast<int64_t>(q.size())));
+            }
+        }
+    }
+
+    std::shared_ptr<arrow::Array> a_channel, a_tbin, a_charge;
+    ARROW_RETURN_NOT_OK(channel_b.Finish(&a_channel));
+    ARROW_RETURN_NOT_OK(tbin_b.Finish(&a_tbin));
+    ARROW_RETURN_NOT_OK(charge_b.Finish(&a_charge));
+
+    auto schema = arrow::schema(
+        {
+            arrow::field("wc.trace.channel", arrow::int32(), false),
+            arrow::field("wc.trace.tbin",    arrow::int32(), false),
+            arrow::field("wc.trace.charge",  arrow::list(arrow::float32()), false),
+        },
+        frame_metadata("wc.frame", frame));
+
+    FrameTables out;
+    out.traces = arrow::Table::Make(schema, {a_channel, a_tbin, a_charge}, nrows);
+    ARROW_ASSIGN_OR_RAISE(out.frame_tags, build_frame_tags(frame));
+    ARROW_ASSIGN_OR_RAISE(out.trace_tags, build_trace_tags(frame));
+    ARROW_ASSIGN_OR_RAISE(out.cmm,        build_cmm(frame));
+    return out;
 }
 
 }  // namespace WireCell::Arrow

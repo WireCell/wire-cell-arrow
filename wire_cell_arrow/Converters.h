@@ -4,8 +4,11 @@
 #include "WireCellIface/ITrace.h"
 #include "WireCellIface/IDepo.h"
 #include "WireCellIface/ITensor.h"
+#include "WireCellIface/IFrame.h"
 
 #include <arrow/api.h>
+
+#include <string>
 
 #include <memory>
 
@@ -79,6 +82,39 @@ std::shared_ptr<arrow::Schema> tensor_schema();
 /// decision).
 arrow::Result<std::shared_ptr<arrow::RecordBatch>>
 to_arrow(const WireCell::ITensor::pointer& tensor);
+
+// ---------------------------------------------------------------------------
+// wc.frame
+// ---------------------------------------------------------------------------
+
+/// Encode/decode a double as a bit-exact hexfloat string (C++ to_chars/from_chars,
+/// chars_format::hex, no "0x" prefix).  Used for frame scalars (time, tick) in
+/// schema metadata, where Arrow only stores strings.
+std::string hexfloat(double v);
+double parse_hexfloat(const std::string& s);
+
+/// A wc.frame as a bundle of standalone Arrow tables (per the ddm-li8 decision):
+///   traces     : the wc.frame / wc.frame.dense trace table (frame scalars
+///                ident/time/tick live in its schema metadata)
+///   frame_tags : wc.frame.frame_tags     (0 rows when none)
+///   trace_tags : wc.frame.trace_tags     (0 rows when none)
+///   cmm        : wc.frame.cmm            (0 rows when the CMM is empty)
+struct FrameTables {
+    std::shared_ptr<arrow::Table> traces;
+    std::shared_ptr<arrow::Table> frame_tags;
+    std::shared_ptr<arrow::Table> trace_tags;
+    std::shared_ptr<arrow::Table> cmm;
+};
+
+/// Convert an IFrame to its sparse wc.frame bundle.  Each trace is one row of
+/// the traces table (charge as list<float32>); ident/time/tick are stored in
+/// the traces-table schema metadata (arrow.schema=wc.frame).  Tags and CMM are
+/// emitted as the companion tables.  General-case converter (any traces).
+///
+/// (The issue's stated single-Table return predates the ddm-li8 bundle
+/// decision; this returns the full bundle.)
+arrow::Result<FrameTables>
+to_arrow_sparse(const WireCell::IFrame::pointer& frame);
 
 }  // namespace WireCell::Arrow
 
