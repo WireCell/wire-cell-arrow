@@ -118,72 +118,108 @@ arrow::Status append_depo_fields(const WireCell::IDepo::pointer& d,
 }
 }  // namespace
 
+namespace {
+// Builders for the shared wc.depo / wc.deposet row schema (10 flat columns +
+// the priors list<struct>).  append() adds one depo row (flat fields + its
+// prior() chain as structs, most-recent-first); finish() yields the 11 column
+// arrays in schema order.  Used by both the single-depo and deposet converters.
+struct DepoRowBuilders {
+    arrow::DoubleBuilder time, charge, energy, x, y, z, el, et;
+    arrow::Int32Builder id, pdg;
+    std::shared_ptr<arrow::StructBuilder> sb;
+    std::shared_ptr<arrow::ListBuilder> priors;
+
+    explicit DepoRowBuilders(arrow::MemoryPool* pool)
+      : time(pool), charge(pool), energy(pool), x(pool), y(pool), z(pool),
+        el(pool), et(pool), id(pool), pdg(pool)
+    {
+        std::vector<std::shared_ptr<arrow::ArrayBuilder>> sf = {
+            std::make_shared<arrow::DoubleBuilder>(pool), std::make_shared<arrow::DoubleBuilder>(pool),
+            std::make_shared<arrow::DoubleBuilder>(pool), std::make_shared<arrow::DoubleBuilder>(pool),
+            std::make_shared<arrow::DoubleBuilder>(pool), std::make_shared<arrow::DoubleBuilder>(pool),
+            std::make_shared<arrow::DoubleBuilder>(pool), std::make_shared<arrow::DoubleBuilder>(pool),
+            std::make_shared<arrow::Int32Builder>(pool),  std::make_shared<arrow::Int32Builder>(pool),
+        };
+        sb = std::make_shared<arrow::StructBuilder>(depo_struct_type(), pool, sf);
+        priors = std::make_shared<arrow::ListBuilder>(pool, sb);
+    }
+
+    arrow::Status append(const WireCell::IDepo::pointer& d)
+    {
+        ARROW_RETURN_NOT_OK(append_depo_fields(d, &time, &charge, &energy, &x, &y, &z,
+                                               &el, &et, &id, &pdg));
+        ARROW_RETURN_NOT_OK(priors->Append());   // open this row's priors list
+        for (auto p = d->prior(); p; p = p->prior()) {
+            ARROW_RETURN_NOT_OK(sb->Append());
+            ARROW_RETURN_NOT_OK(append_depo_fields(p,
+                static_cast<arrow::DoubleBuilder*>(sb->field_builder(0)),
+                static_cast<arrow::DoubleBuilder*>(sb->field_builder(1)),
+                static_cast<arrow::DoubleBuilder*>(sb->field_builder(2)),
+                static_cast<arrow::DoubleBuilder*>(sb->field_builder(3)),
+                static_cast<arrow::DoubleBuilder*>(sb->field_builder(4)),
+                static_cast<arrow::DoubleBuilder*>(sb->field_builder(5)),
+                static_cast<arrow::DoubleBuilder*>(sb->field_builder(6)),
+                static_cast<arrow::DoubleBuilder*>(sb->field_builder(7)),
+                static_cast<arrow::Int32Builder*>(sb->field_builder(8)),
+                static_cast<arrow::Int32Builder*>(sb->field_builder(9))));
+        }
+        return arrow::Status::OK();
+    }
+
+    arrow::Status finish(std::vector<std::shared_ptr<arrow::Array>>& out)
+    {
+        out.resize(11);
+        ARROW_RETURN_NOT_OK(time.Finish(&out[0]));
+        ARROW_RETURN_NOT_OK(charge.Finish(&out[1]));
+        ARROW_RETURN_NOT_OK(energy.Finish(&out[2]));
+        ARROW_RETURN_NOT_OK(x.Finish(&out[3]));
+        ARROW_RETURN_NOT_OK(y.Finish(&out[4]));
+        ARROW_RETURN_NOT_OK(z.Finish(&out[5]));
+        ARROW_RETURN_NOT_OK(el.Finish(&out[6]));
+        ARROW_RETURN_NOT_OK(et.Finish(&out[7]));
+        ARROW_RETURN_NOT_OK(id.Finish(&out[8]));
+        ARROW_RETURN_NOT_OK(pdg.Finish(&out[9]));
+        ARROW_RETURN_NOT_OK(priors->Finish(&out[10]));
+        return arrow::Status::OK();
+    }
+};
+}  // namespace
+
 arrow::Result<std::shared_ptr<arrow::RecordBatch>>
 to_arrow(const WireCell::IDepo::pointer& depo)
 {
-    auto* pool = arrow::default_memory_pool();
+    DepoRowBuilders b(arrow::default_memory_pool());
+    ARROW_RETURN_NOT_OK(b.append(depo));
+    std::vector<std::shared_ptr<arrow::Array>> cols;
+    ARROW_RETURN_NOT_OK(b.finish(cols));
+    return arrow::RecordBatch::Make(depo_schema(), /*num_rows=*/1, cols);
+}
 
-    // Flat top-level column builders (this depo's own fields).
-    arrow::DoubleBuilder time_b(pool), charge_b(pool), energy_b(pool),
-        x_b(pool), y_b(pool), z_b(pool), el_b(pool), et_b(pool);
-    arrow::Int32Builder id_b(pool), pdg_b(pool);
+std::shared_ptr<arrow::Schema> deposet_schema(int ident)
+{
+    // Same columns as wc.depo; differ only by schema metadata.
+    auto base = depo_schema();
+    auto md = arrow::key_value_metadata({
+        {"arrow.schema",      "wc.deposet"},
+        {"wc.deposet.ident",  std::to_string(ident)},
+    });
+    return arrow::schema(base->fields(), md);
+}
 
-    // priors: list<struct<...>>.  Build the struct field builders in schema
-    // order, then a StructBuilder, then wrap in a ListBuilder.
-    std::vector<std::shared_ptr<arrow::ArrayBuilder>> sfields = {
-        std::make_shared<arrow::DoubleBuilder>(pool),  // time
-        std::make_shared<arrow::DoubleBuilder>(pool),  // charge
-        std::make_shared<arrow::DoubleBuilder>(pool),  // energy
-        std::make_shared<arrow::DoubleBuilder>(pool),  // x
-        std::make_shared<arrow::DoubleBuilder>(pool),  // y
-        std::make_shared<arrow::DoubleBuilder>(pool),  // z
-        std::make_shared<arrow::DoubleBuilder>(pool),  // extent_long
-        std::make_shared<arrow::DoubleBuilder>(pool),  // extent_tran
-        std::make_shared<arrow::Int32Builder>(pool),   // id
-        std::make_shared<arrow::Int32Builder>(pool),   // pdg
-    };
-    auto struct_b = std::make_shared<arrow::StructBuilder>(depo_struct_type(), pool, sfields);
-    arrow::ListBuilder priors_b(pool, struct_b);
-
-    auto* s_t  = static_cast<arrow::DoubleBuilder*>(sfields[0].get());
-    auto* s_q  = static_cast<arrow::DoubleBuilder*>(sfields[1].get());
-    auto* s_e  = static_cast<arrow::DoubleBuilder*>(sfields[2].get());
-    auto* s_x  = static_cast<arrow::DoubleBuilder*>(sfields[3].get());
-    auto* s_y  = static_cast<arrow::DoubleBuilder*>(sfields[4].get());
-    auto* s_z  = static_cast<arrow::DoubleBuilder*>(sfields[5].get());
-    auto* s_el = static_cast<arrow::DoubleBuilder*>(sfields[6].get());
-    auto* s_et = static_cast<arrow::DoubleBuilder*>(sfields[7].get());
-    auto* s_id = static_cast<arrow::Int32Builder*>(sfields[8].get());
-    auto* s_pg = static_cast<arrow::Int32Builder*>(sfields[9].get());
-
-    // This depo's own fields -> flat columns.
-    ARROW_RETURN_NOT_OK(append_depo_fields(depo, &time_b, &charge_b, &energy_b,
-                                           &x_b, &y_b, &z_b, &el_b, &et_b, &id_b, &pdg_b));
-
-    // prior() chain -> one list element (this row), structs most-recent-first.
-    ARROW_RETURN_NOT_OK(priors_b.Append());
-    for (auto p = depo->prior(); p; p = p->prior()) {
-        ARROW_RETURN_NOT_OK(struct_b->Append());
-        ARROW_RETURN_NOT_OK(append_depo_fields(p, s_t, s_q, s_e, s_x, s_y, s_z,
-                                               s_el, s_et, s_id, s_pg));
+arrow::Result<std::shared_ptr<arrow::Table>>
+to_arrow(const WireCell::IDepoSet::pointer& deposet)
+{
+    DepoRowBuilders b(arrow::default_memory_pool());
+    auto depos = deposet->depos();
+    const int64_t nrows = depos ? static_cast<int64_t>(depos->size()) : 0;
+    if (depos) {
+        for (const auto& d : *depos) {
+            ARROW_RETURN_NOT_OK(b.append(d));
+        }
     }
-
-    std::shared_ptr<arrow::Array> a_time, a_charge, a_energy, a_x, a_y, a_z,
-        a_el, a_et, a_id, a_pdg, a_priors;
-    ARROW_RETURN_NOT_OK(time_b.Finish(&a_time));
-    ARROW_RETURN_NOT_OK(charge_b.Finish(&a_charge));
-    ARROW_RETURN_NOT_OK(energy_b.Finish(&a_energy));
-    ARROW_RETURN_NOT_OK(x_b.Finish(&a_x));
-    ARROW_RETURN_NOT_OK(y_b.Finish(&a_y));
-    ARROW_RETURN_NOT_OK(z_b.Finish(&a_z));
-    ARROW_RETURN_NOT_OK(el_b.Finish(&a_el));
-    ARROW_RETURN_NOT_OK(et_b.Finish(&a_et));
-    ARROW_RETURN_NOT_OK(id_b.Finish(&a_id));
-    ARROW_RETURN_NOT_OK(pdg_b.Finish(&a_pdg));
-    ARROW_RETURN_NOT_OK(priors_b.Finish(&a_priors));
-
-    return arrow::RecordBatch::Make(depo_schema(), /*num_rows=*/1,
-        {a_time, a_charge, a_energy, a_x, a_y, a_z, a_el, a_et, a_id, a_pdg, a_priors});
+    std::vector<std::shared_ptr<arrow::Array>> cols;
+    ARROW_RETURN_NOT_OK(b.finish(cols));
+    return arrow::Table::Make(deposet_schema(deposet->ident()), cols, nrows);
 }
 
 // ---------------------------------------------------------------------------
@@ -204,55 +240,100 @@ std::shared_ptr<arrow::Schema> tensor_schema()
         md);
 }
 
+namespace {
+// Builders for the shared wc.tensor / wc.tensorset row schema.  Used by both
+// the single-tensor and tensorset converters.
+struct TensorRowBuilders {
+    arrow::LargeBinaryBuilder data;
+    arrow::StringBuilder dtype;
+    std::shared_ptr<arrow::Int64Builder> shape_vb, order_vb;
+    std::shared_ptr<arrow::ListBuilder> shape, order;
+    arrow::StringBuilder meta;
+
+    explicit TensorRowBuilders(arrow::MemoryPool* pool)
+      : data(pool), dtype(pool)
+      , shape_vb(std::make_shared<arrow::Int64Builder>(pool))
+      , order_vb(std::make_shared<arrow::Int64Builder>(pool))
+      , shape(std::make_shared<arrow::ListBuilder>(pool, shape_vb))
+      , order(std::make_shared<arrow::ListBuilder>(pool, order_vb))
+      , meta(pool)
+    {}
+
+    arrow::Status append(const WireCell::ITensor::pointer& t)
+    {
+        const auto nbytes = static_cast<int64_t>(t->size());
+        if (nbytes > 0) {
+            ARROW_RETURN_NOT_OK(data.Append(reinterpret_cast<const uint8_t*>(t->data()), nbytes));
+        } else {
+            ARROW_RETURN_NOT_OK(data.AppendEmptyValue());
+        }
+        ARROW_RETURN_NOT_OK(dtype.Append(t->dtype()));
+        ARROW_RETURN_NOT_OK(shape->Append());
+        for (auto s : t->shape()) ARROW_RETURN_NOT_OK(shape_vb->Append(static_cast<int64_t>(s)));
+        ARROW_RETURN_NOT_OK(order->Append());
+        for (auto o : t->order()) ARROW_RETURN_NOT_OK(order_vb->Append(static_cast<int64_t>(o)));
+        auto cfg = t->metadata();
+        if (cfg.isNull()) {
+            ARROW_RETURN_NOT_OK(meta.AppendNull());
+        } else {
+            ARROW_RETURN_NOT_OK(meta.Append(WireCell::Persist::dumps(cfg)));
+        }
+        return arrow::Status::OK();
+    }
+
+    arrow::Status finish(std::vector<std::shared_ptr<arrow::Array>>& out)
+    {
+        out.resize(5);
+        ARROW_RETURN_NOT_OK(data.Finish(&out[0]));
+        ARROW_RETURN_NOT_OK(dtype.Finish(&out[1]));
+        ARROW_RETURN_NOT_OK(shape->Finish(&out[2]));
+        ARROW_RETURN_NOT_OK(order->Finish(&out[3]));
+        ARROW_RETURN_NOT_OK(meta.Finish(&out[4]));
+        return arrow::Status::OK();
+    }
+};
+}  // namespace
+
 arrow::Result<std::shared_ptr<arrow::RecordBatch>>
 to_arrow(const WireCell::ITensor::pointer& tensor)
 {
-    auto* pool = arrow::default_memory_pool();
+    TensorRowBuilders b(arrow::default_memory_pool());
+    ARROW_RETURN_NOT_OK(b.append(tensor));
+    std::vector<std::shared_ptr<arrow::Array>> cols;
+    ARROW_RETURN_NOT_OK(b.finish(cols));
+    return arrow::RecordBatch::Make(tensor_schema(), /*num_rows=*/1, cols);
+}
 
-    arrow::LargeBinaryBuilder data_b(pool);
-    arrow::StringBuilder dtype_b(pool);
-    auto shape_vb = std::make_shared<arrow::Int64Builder>(pool);
-    arrow::ListBuilder shape_b(pool, shape_vb);
-    auto order_vb = std::make_shared<arrow::Int64Builder>(pool);
-    arrow::ListBuilder order_b(pool, order_vb);
-    arrow::StringBuilder meta_b(pool);
-
-    // data: raw bytes copied verbatim.
-    const auto nbytes = static_cast<int64_t>(tensor->size());
-    if (nbytes > 0) {
-        ARROW_RETURN_NOT_OK(data_b.Append(reinterpret_cast<const uint8_t*>(tensor->data()), nbytes));
-    } else {
-        ARROW_RETURN_NOT_OK(data_b.AppendEmptyValue());  // non-null, zero-length
+std::shared_ptr<arrow::Schema> tensorset_schema(int ident, const std::string& metadata_json)
+{
+    auto base = tensor_schema();
+    std::vector<std::string> keys = {"arrow.schema", "wc.tensorset.ident"};
+    std::vector<std::string> vals = {"wc.tensorset", std::to_string(ident)};
+    if (!metadata_json.empty()) {
+        keys.push_back("wc.tensorset.metadata");
+        vals.push_back(metadata_json);
     }
+    auto md = std::make_shared<arrow::KeyValueMetadata>(std::move(keys), std::move(vals));
+    return arrow::schema(base->fields(), md);
+}
 
-    ARROW_RETURN_NOT_OK(dtype_b.Append(tensor->dtype()));
-
-    ARROW_RETURN_NOT_OK(shape_b.Append());
-    for (auto s : tensor->shape()) {
-        ARROW_RETURN_NOT_OK(shape_vb->Append(static_cast<int64_t>(s)));
+arrow::Result<std::shared_ptr<arrow::Table>>
+to_arrow(const WireCell::ITensorSet::pointer& tensorset)
+{
+    TensorRowBuilders b(arrow::default_memory_pool());
+    auto tensors = tensorset->tensors();
+    const int64_t nrows = tensors ? static_cast<int64_t>(tensors->size()) : 0;
+    if (tensors) {
+        for (const auto& t : *tensors) {
+            ARROW_RETURN_NOT_OK(b.append(t));
+        }
     }
+    std::vector<std::shared_ptr<arrow::Array>> cols;
+    ARROW_RETURN_NOT_OK(b.finish(cols));
 
-    ARROW_RETURN_NOT_OK(order_b.Append());
-    for (auto o : tensor->order()) {     // empty => C order
-        ARROW_RETURN_NOT_OK(order_vb->Append(static_cast<int64_t>(o)));
-    }
-
-    auto cfg = tensor->metadata();
-    if (cfg.isNull()) {
-        ARROW_RETURN_NOT_OK(meta_b.AppendNull());
-    } else {
-        ARROW_RETURN_NOT_OK(meta_b.Append(WireCell::Persist::dumps(cfg)));
-    }
-
-    std::shared_ptr<arrow::Array> a_data, a_dtype, a_shape, a_order, a_meta;
-    ARROW_RETURN_NOT_OK(data_b.Finish(&a_data));
-    ARROW_RETURN_NOT_OK(dtype_b.Finish(&a_dtype));
-    ARROW_RETURN_NOT_OK(shape_b.Finish(&a_shape));
-    ARROW_RETURN_NOT_OK(order_b.Finish(&a_order));
-    ARROW_RETURN_NOT_OK(meta_b.Finish(&a_meta));
-
-    return arrow::RecordBatch::Make(tensor_schema(), /*num_rows=*/1,
-                                    {a_data, a_dtype, a_shape, a_order, a_meta});
+    auto cfg = tensorset->metadata();
+    std::string md_json = cfg.isNull() ? std::string() : WireCell::Persist::dumps(cfg);
+    return arrow::Table::Make(tensorset_schema(tensorset->ident(), md_json), cols, nrows);
 }
 
 // ---------------------------------------------------------------------------

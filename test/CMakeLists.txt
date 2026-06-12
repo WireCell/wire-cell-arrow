@@ -88,5 +88,17 @@ target_link_libraries(test_frame_dense_converter PRIVATE wire_cell_arrow
   ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME frame_dense_converter COMMAND test_frame_dense_converter)
 
+# wc.deposet converter (ddm-uac).
+add_executable(test_deposet_converter test_deposet_converter.cpp)
+target_link_libraries(test_deposet_converter PRIVATE wire_cell_arrow
+  Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME deposet_converter COMMAND test_deposet_converter)
+
+# wc.tensorset converter (ddm-szy).
+add_executable(test_tensorset_converter test_tensorset_converter.cpp)
+target_link_libraries(test_tensorset_converter PRIVATE wire_cell_arrow
+  Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME tensorset_converter COMMAND test_tensorset_converter)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.

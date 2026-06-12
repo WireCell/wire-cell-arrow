@@ -3,7 +3,9 @@
 
 #include "WireCellIface/ITrace.h"
 #include "WireCellIface/IDepo.h"
+#include "WireCellIface/IDepoSet.h"
 #include "WireCellIface/ITensor.h"
+#include "WireCellIface/ITensorSet.h"
 #include "WireCellIface/IFrame.h"
 
 #include <arrow/api.h>
@@ -64,6 +66,15 @@ std::shared_ptr<arrow::Schema> depo_schema();
 arrow::Result<std::shared_ptr<arrow::RecordBatch>>
 to_arrow(const WireCell::IDepo::pointer& depo);
 
+/// The wc.deposet schema: identical columns to wc.depo, but schema metadata
+/// arrow.schema = "wc.deposet" and wc.deposet.ident = <ident>.
+std::shared_ptr<arrow::Schema> deposet_schema(int ident);
+
+/// Convert an IDepoSet to a wc.deposet Table: one row per active depo (same row
+/// schema as wc.depo, priors nested per row), set ident in schema metadata.
+arrow::Result<std::shared_ptr<arrow::Table>>
+to_arrow(const WireCell::IDepoSet::pointer& deposet);
+
 /// The canonical Arrow schema for a wc.tensor RecordBatch: one row per tensor.
 ///
 /// Columns: wc.tensor.data large_binary (non-null), wc.tensor.dtype utf8
@@ -82,6 +93,16 @@ std::shared_ptr<arrow::Schema> tensor_schema();
 /// decision).
 arrow::Result<std::shared_ptr<arrow::RecordBatch>>
 to_arrow(const WireCell::ITensor::pointer& tensor);
+
+/// The wc.tensorset schema: identical columns to wc.tensor, with schema
+/// metadata arrow.schema = "wc.tensorset", wc.tensorset.ident, and (when the
+/// set has metadata) wc.tensorset.metadata JSON.
+std::shared_ptr<arrow::Schema> tensorset_schema(int ident, const std::string& metadata_json = {});
+
+/// Convert an ITensorSet to a wc.tensorset Table: one row per tensor (same row
+/// schema as wc.tensor), set ident + metadata in schema metadata.
+arrow::Result<std::shared_ptr<arrow::Table>>
+to_arrow(const WireCell::ITensorSet::pointer& tensorset);
 
 // ---------------------------------------------------------------------------
 // wc.frame
