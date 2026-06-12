@@ -124,5 +124,11 @@ target_link_libraries(test_roundtrip PRIVATE wire_cell_arrow
   Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME roundtrip COMMAND test_roundtrip)
 
+# Collection operator tests (ddm-8t5).
+add_executable(test_collection_ops test_collection_ops.cpp)
+target_link_libraries(test_collection_ops PRIVATE wire_cell_arrow
+  Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME collection_ops COMMAND test_collection_ops)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.
