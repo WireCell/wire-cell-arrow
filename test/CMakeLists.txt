@@ -20,5 +20,13 @@ target_link_libraries(test_trivial PRIVATE wire_cell_arrow
   ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME trivial COMMAND test_trivial)
 
+# wc.trace converter unit test (ddm-85v): to_arrow(ITrace).
+add_executable(test_trace_converter test_trace_converter.cpp)
+target_link_libraries(test_trace_converter PRIVATE wire_cell_arrow
+  Arrow::arrow_shared
+  WireCell::Aux
+  ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME trace_converter COMMAND test_trace_converter)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.
