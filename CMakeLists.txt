@@ -61,6 +61,7 @@ add_compile_options(-Wall -Wpedantic -Werror)
 add_library(wire_cell_arrow SHARED
   wire_cell_arrow/Version.cpp
   wire_cell_arrow/Converters.cpp
+  wire_cell_arrow/ArrowTrace.cpp
 )
 
 target_compile_definitions(wire_cell_arrow

@@ -28,5 +28,13 @@ target_link_libraries(test_trace_converter PRIVATE wire_cell_arrow
   ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME trace_converter COMMAND test_trace_converter)
 
+# ArrowTrace facade round-trip (ddm-ajf): ITrace -> Arrow -> ITrace.
+add_executable(test_arrow_trace test_arrow_trace.cpp)
+target_link_libraries(test_arrow_trace PRIVATE wire_cell_arrow
+  Arrow::arrow_shared
+  WireCell::Aux
+  ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME arrow_trace COMMAND test_arrow_trace)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.
