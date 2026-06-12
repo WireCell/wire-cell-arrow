@@ -1,0 +1,26 @@
+@PACKAGE_INIT@
+
+# wire_cell_arrowConfig.cmake
+#
+# Allows downstream CMake projects to locate the wire_cell_arrow shared library
+# and headers via:
+#   find_package(wire_cell_arrow REQUIRED)
+#   target_link_libraries(my_target PRIVATE wire_cell_arrow::wire_cell_arrow)
+#
+# Exported targets:
+#   wire_cell_arrow::wire_cell_arrow  — the IData<->Arrow conversion library
+
+include(CMakeFindDependencyMacro)
+
+# Apache Arrow ships its own CMake package config; no custom finder needed.
+find_dependency(Arrow CONFIG)
+
+# WireCell is located via the bundled FindWireCell.cmake module.  Make it
+# discoverable to find_dependency by adding this config's directory (which the
+# module is installed alongside) to the module path.
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}")
+find_dependency(WireCell)
+
+include("${CMAKE_CURRENT_LIST_DIR}/wire_cell_arrowTargets.cmake")
+
+check_required_components(wire_cell_arrow)

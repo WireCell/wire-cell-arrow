@@ -1,0 +1,30 @@
+Contributing to the wire-cell-phlex package.
+
+Submitting contributions.
+
+Contributions are accepted via Pull Requests (PRs) on GitHub.  By submitting a
+PR, you agree that your contribution is licensed under the Apache License 2.0
+and that you will be responsive to any requested changes to the PR prior to
+merging.  Unwanted or neglected PRs may be closed without comment.
+
+Use of large language models (LLMs).
+
+We recognize LLMs as useful and acceptable tools for software development.
+
+Any contribution to this package prepared with LLM assistance is considered to
+be the work of the human submitter.  The human is expected to be responsible for
+the contribution to the same extent as if they had prepared the contribution
+without LLM assistance.
+
+When LLMs are used to prepare a contribution, it is recomended but not required,
+to include in the commit and/or the PR messages the names of LLM models used and
+the manner in which they assisted.
+
+
+
+
+
+
+
+
+
