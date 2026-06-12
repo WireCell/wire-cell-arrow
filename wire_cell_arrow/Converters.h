@@ -2,6 +2,7 @@
 #define WIRE_CELL_ARROW_CONVERTERS_H
 
 #include "WireCellIface/ITrace.h"
+#include "WireCellIface/IDepo.h"
 
 #include <arrow/api.h>
 
@@ -34,6 +35,30 @@ std::shared_ptr<arrow::Schema> trace_schema();
 /// type exactly, so charge values are appended without conversion.
 arrow::Result<std::shared_ptr<arrow::RecordBatch>>
 to_arrow(const WireCell::ITrace::pointer& trace);
+
+/// The struct<> element type used for the wc.depo.priors list: one field per
+/// per-depo column (bare names: time, charge, energy, x, y, z, extent_long,
+/// extent_tran : float64; id, pdg : int32), all non-null.
+std::shared_ptr<arrow::DataType> depo_struct_type();
+
+/// The canonical Arrow schema for a wc.depo RecordBatch: one row per depo.
+///
+/// Columns (all non-null): wc.depo.{time,charge,energy,x,y,z,extent_long,
+/// extent_tran} float64, wc.depo.{id,pdg} int32, and
+/// wc.depo.priors list<struct<...>> (the prior() chain, most-recent-first,
+/// empty when no prior).  Schema metadata arrow.schema = "wc.depo".
+///
+/// This same column set is reused as the rows of wc.deposet.
+std::shared_ptr<arrow::Schema> depo_schema();
+
+/// Convert a single IDepo to a one-row RecordBatch conforming to wc.depo.
+///
+/// The depo's own fields populate the flat columns; the prior() chain is
+/// flattened into the wc.depo.priors list as structs, most-recent-first
+/// (priors[0] = immediate prior).  energy() is persisted (it is dropped by the
+/// WCT numpy serialization).
+arrow::Result<std::shared_ptr<arrow::RecordBatch>>
+to_arrow(const WireCell::IDepo::pointer& depo);
 
 }  // namespace WireCell::Arrow
 

@@ -36,5 +36,13 @@ target_link_libraries(test_arrow_trace PRIVATE wire_cell_arrow
   ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME arrow_trace COMMAND test_arrow_trace)
 
+# wc.depo converter unit test (ddm-0w7): to_arrow(IDepo) incl. prior chain.
+add_executable(test_depo_converter test_depo_converter.cpp)
+target_link_libraries(test_depo_converter PRIVATE wire_cell_arrow
+  Arrow::arrow_shared
+  WireCell::Aux
+  ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME depo_converter COMMAND test_depo_converter)
+
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.
