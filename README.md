@@ -18,8 +18,26 @@ See `docs/design.md` for schema rationale and `docs/api.md` for usage examples.
 
 ## Build
 
+The `default` CMake preset pins the Spack GCC 15 toolchain via `$CC`/`$CXX`
+(the Debian system GCC 12 lacks the C++23 features the WCT/phlex headers need).
+Set them from the Spack store — the umbrella `.envrc` does this:
+
 ```bash
+export CC="$(spack -e wcph location -i gcc@15)/bin/gcc"
+export CXX="$(spack -e wcph location -i gcc@15)/bin/g++"
+
 cmake --preset default -S source/wire-cell-arrow -B builds/wire-cell-arrow
 cmake --build builds/wire-cell-arrow
 ctest --test-dir builds/wire-cell-arrow
 ```
+
+## Components
+
+- `wire_cell_arrow/Converters.{h,cpp}` — schema factories (`trace_schema`,
+  `depo_schema`, `tensor_schema`, …) and `to_arrow(...)` converters (WCT → Arrow).
+- `wire_cell_arrow/Arrow{Trace,Depo,Tensor,Frame,DepoSet,TensorSet}.{h,cpp}` —
+  lazy facades implementing the WCT interfaces over Arrow objects (Arrow → WCT).
+- `wire_cell_arrow/Ops.{h,cpp}` — collection operators (decompose/reassemble).
+
+The C++ namespace is `WireCell::Arrow` (capital `A`, so an unqualified `arrow::`
+refers to Apache Arrow).
