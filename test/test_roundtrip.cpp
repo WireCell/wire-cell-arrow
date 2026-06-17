@@ -6,15 +6,15 @@
 //   (2) from_arrow(to_arrow(x)) deep-equals x across all accessors    — fidelity
 // Per-type fidelity notes (what is preserved / normalized / dropped) are in
 // wire-cell-arrow/docs/fidelity.md.
-#include "test_helpers.h"
+#include "test_helpers.hpp"
 
-#include "wire_cell_arrow/ArrowDepo.h"
-#include "wire_cell_arrow/ArrowDepoSet.h"
-#include "wire_cell_arrow/ArrowFrame.h"
-#include "wire_cell_arrow/ArrowTensor.h"
-#include "wire_cell_arrow/ArrowTensorSet.h"
-#include "wire_cell_arrow/ArrowTrace.h"
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/ArrowDepo.hpp"
+#include "wire_cell_arrow/ArrowDepoSet.hpp"
+#include "wire_cell_arrow/ArrowFrame.hpp"
+#include "wire_cell_arrow/ArrowTensor.hpp"
+#include "wire_cell_arrow/ArrowTensorSet.hpp"
+#include "wire_cell_arrow/ArrowTrace.hpp"
+#include "wire_cell_arrow/Converters.hpp"
 
 #include <iostream>
 

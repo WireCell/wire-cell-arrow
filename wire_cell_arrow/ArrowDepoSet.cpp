@@ -1,6 +1,6 @@
-#include "wire_cell_arrow/ArrowDepoSet.h"
-#include "wire_cell_arrow/ArrowDepo.h"
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/ArrowDepoSet.hpp"
+#include "wire_cell_arrow/ArrowDepo.hpp"
+#include "wire_cell_arrow/Converters.hpp"
 
 #include <stdexcept>
 

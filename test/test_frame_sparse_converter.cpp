@@ -5,7 +5,7 @@
 // traces (+ ident/time/tick metadata via hexfloat), frame_tags, trace_tags,
 // and the flattened cmm.
 
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/Converters.hpp"
 
 #include "WireCellAux/SimpleFrame.h"
 #include "WireCellAux/SimpleTrace.h"

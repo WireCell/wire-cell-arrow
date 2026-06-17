@@ -3,7 +3,7 @@
 // Confirms the SHARED library links and a symbol resolves.  The substantive
 // Arrow+WCT round-trip smoke test is added separately (see issue ddm-l4x).
 
-#include "wire_cell_arrow/Version.h"
+#include "wire_cell_arrow/Version.hpp"
 
 #include <cstring>
 #include <iostream>

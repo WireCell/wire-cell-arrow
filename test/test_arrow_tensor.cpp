@@ -3,8 +3,8 @@
 // SimpleTensor --to_arrow--> wc.tensor batch --ArrowTensor--> ITensor, then
 // check shape/dtype/element_size/size/data bytes and JSON metadata.
 
-#include "wire_cell_arrow/Converters.h"
-#include "wire_cell_arrow/ArrowTensor.h"
+#include "wire_cell_arrow/Converters.hpp"
+#include "wire_cell_arrow/ArrowTensor.hpp"
 
 #include "WireCellAux/SimpleTensor.h"
 

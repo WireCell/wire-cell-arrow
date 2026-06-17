@@ -1,5 +1,5 @@
-#include "wire_cell_arrow/ArrowTensor.h"
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/ArrowTensor.hpp"
+#include "wire_cell_arrow/Converters.hpp"
 
 #include "WireCellUtil/Persist.h"
 

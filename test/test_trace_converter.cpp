@@ -4,7 +4,7 @@
 // the wc.trace schema (field names/types, arrow.schema metadata) and that
 // channel/tbin/charge round-trip — including the empty-charge edge case.
 
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/Converters.hpp"
 
 #include "WireCellAux/SimpleTrace.h"
 

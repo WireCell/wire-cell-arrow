@@ -4,7 +4,7 @@
 // one row per channel, tbin/nticks in schema metadata.  Non-dense frame is
 // rejected with Status::Invalid.
 
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/Converters.hpp"
 
 #include "WireCellAux/SimpleFrame.h"
 #include "WireCellAux/SimpleTrace.h"

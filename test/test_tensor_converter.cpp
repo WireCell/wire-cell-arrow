@@ -3,7 +3,7 @@
 // Checks schema/metadata, raw-byte round-trip of the data buffer, dtype,
 // shape, order (empty = C), and JSON metadata (present + absent).
 
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/Converters.hpp"
 
 #include "WireCellAux/SimpleTensor.h"
 #include "WireCellUtil/Persist.h"

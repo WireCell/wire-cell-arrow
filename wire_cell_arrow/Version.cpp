@@ -1,4 +1,4 @@
-#include "wire_cell_arrow/Version.h"
+#include "wire_cell_arrow/Version.hpp"
 
 namespace WireCell::Arrow {
 

@@ -1,5 +1,5 @@
 // Unit test for to_arrow(ITensorSet) — wc.tensorset (ddm-szy).
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/Converters.hpp"
 #include "WireCellAux/SimpleTensorSet.h"
 #include "WireCellAux/SimpleTensor.h"
 #include "WireCellUtil/Persist.h"

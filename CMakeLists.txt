@@ -113,7 +113,7 @@ install(TARGETS wire_cell_arrow
 # Public headers
 install(DIRECTORY wire_cell_arrow/
   DESTINATION "${CMAKE_INSTALL_INCLUDEDIR}/wire_cell_arrow"
-  FILES_MATCHING PATTERN "*.h"
+  FILES_MATCHING PATTERN "*.hpp"
 )
 
 # CMake package config (so find_package(wire_cell_arrow) works downstream)

@@ -3,8 +3,8 @@
 // IFrame --to_arrow_sparse/dense--> bundle --ArrowFrame--> IFrame, checking
 // ident/time/tick, tags, tagged_traces/summary, masks, and traces().
 
-#include "wire_cell_arrow/Converters.h"
-#include "wire_cell_arrow/ArrowFrame.h"
+#include "wire_cell_arrow/Converters.hpp"
+#include "wire_cell_arrow/ArrowFrame.hpp"
 
 #include "WireCellAux/SimpleFrame.h"
 #include "WireCellAux/SimpleTrace.h"

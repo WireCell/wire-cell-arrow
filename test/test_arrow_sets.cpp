@@ -1,7 +1,7 @@
 // Round-trip tests for the set facades (ddm-5vm ArrowDepoSet, ddm-2c4 ArrowTensorSet).
-#include "wire_cell_arrow/Converters.h"
-#include "wire_cell_arrow/ArrowDepoSet.h"
-#include "wire_cell_arrow/ArrowTensorSet.h"
+#include "wire_cell_arrow/Converters.hpp"
+#include "wire_cell_arrow/ArrowDepoSet.hpp"
+#include "wire_cell_arrow/ArrowTensorSet.hpp"
 #include "WireCellAux/SimpleDepoSet.h"
 #include "WireCellAux/SimpleDepo.h"
 #include "WireCellAux/SimpleTensorSet.h"

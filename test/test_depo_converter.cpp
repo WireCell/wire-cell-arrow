@@ -5,7 +5,7 @@
 // plus the no-prior (empty list) case.  Calls ValidateFull() to catch any
 // nested type mismatch.
 
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/Converters.hpp"
 
 #include "WireCellAux/SimpleDepo.h"
 #include "WireCellUtil/Point.h"

@@ -1,5 +1,5 @@
-#include "wire_cell_arrow/ArrowFrame.h"
-#include "wire_cell_arrow/ArrowTrace.h"
+#include "wire_cell_arrow/ArrowFrame.hpp"
+#include "wire_cell_arrow/ArrowTrace.hpp"
 
 #include <stdexcept>
 #include <string>

@@ -4,13 +4,13 @@
 // kSchemaVersion under kSchemaVersionKey; (2) a versioned product round-trips
 // through its facade; (3) a reader DETECTS and REJECTS a deliberately-bumped
 // (newer) version; (4) an unversioned (legacy) schema is accepted best-effort.
-#include "test_helpers.h"
+#include "test_helpers.hpp"
 
-#include "wire_cell_arrow/ArrowDepoSet.h"
-#include "wire_cell_arrow/ArrowFrame.h"
-#include "wire_cell_arrow/ArrowTensorSet.h"
-#include "wire_cell_arrow/ArrowTrace.h"
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/ArrowDepoSet.hpp"
+#include "wire_cell_arrow/ArrowFrame.hpp"
+#include "wire_cell_arrow/ArrowTensorSet.hpp"
+#include "wire_cell_arrow/ArrowTrace.hpp"
+#include "wire_cell_arrow/Converters.hpp"
 
 #include <iostream>
 #include <memory>

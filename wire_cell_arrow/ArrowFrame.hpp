@@ -1,7 +1,7 @@
 #ifndef WIRE_CELL_ARROW_ARROWFRAME_H
 #define WIRE_CELL_ARROW_ARROWFRAME_H
 
-#include "wire_cell_arrow/Converters.h"   // FrameTables
+#include "wire_cell_arrow/Converters.hpp"   // FrameTables
 
 #include "WireCellIface/IFrame.h"
 #include "WireCellUtil/Waveform.h"

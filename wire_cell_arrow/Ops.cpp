@@ -1,5 +1,5 @@
-#include "wire_cell_arrow/Ops.h"
-#include "wire_cell_arrow/Converters.h"   // table_to_batch, *_schema, hexfloat
+#include "wire_cell_arrow/Ops.hpp"
+#include "wire_cell_arrow/Converters.hpp"   // table_to_batch, *_schema, hexfloat
 
 namespace WireCell::Arrow {
 

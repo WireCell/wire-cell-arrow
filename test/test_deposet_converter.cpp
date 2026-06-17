@@ -1,5 +1,5 @@
 // Unit test for to_arrow(IDepoSet) — wc.deposet (ddm-uac).
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/Converters.hpp"
 #include "WireCellAux/SimpleDepoSet.h"
 #include "WireCellAux/SimpleDepo.h"
 #include "WireCellUtil/Point.h"

@@ -1,12 +1,12 @@
 // Collection operator tests (ddm-8t5): decompose -> reassemble -> compare,
 // plus a zero-copy (shared-buffer) check on frame_to_traces.
-#include "test_helpers.h"
+#include "test_helpers.hpp"
 
-#include "wire_cell_arrow/Converters.h"
-#include "wire_cell_arrow/Ops.h"
-#include "wire_cell_arrow/ArrowFrame.h"
-#include "wire_cell_arrow/ArrowDepoSet.h"
-#include "wire_cell_arrow/ArrowTensorSet.h"
+#include "wire_cell_arrow/Converters.hpp"
+#include "wire_cell_arrow/Ops.hpp"
+#include "wire_cell_arrow/ArrowFrame.hpp"
+#include "wire_cell_arrow/ArrowDepoSet.hpp"
+#include "wire_cell_arrow/ArrowTensorSet.hpp"
 #include "WireCellUtil/Persist.h"
 
 #include <iostream>

@@ -3,8 +3,8 @@
 // SimpleDepo chain --to_arrow--> wc.depo batch --ArrowDepo--> IDepo, then check
 // the facade reports the original fields and walks the prior() chain.
 
-#include "wire_cell_arrow/Converters.h"
-#include "wire_cell_arrow/ArrowDepo.h"
+#include "wire_cell_arrow/Converters.hpp"
+#include "wire_cell_arrow/ArrowDepo.hpp"
 
 #include "WireCellAux/SimpleDepo.h"
 #include "WireCellUtil/Point.h"

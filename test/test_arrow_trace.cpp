@@ -3,8 +3,8 @@
 // SimpleTrace --to_arrow--> RecordBatch --ArrowTrace--> ITrace, then check the
 // facade reports the original channel/tbin/charge.
 
-#include "wire_cell_arrow/Converters.h"
-#include "wire_cell_arrow/ArrowTrace.h"
+#include "wire_cell_arrow/Converters.hpp"
+#include "wire_cell_arrow/ArrowTrace.hpp"
 
 #include "WireCellAux/SimpleTrace.h"
 

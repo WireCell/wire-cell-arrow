@@ -1,5 +1,5 @@
 // Schema-definition validation (ddm-ppo): pure schema factories, no conversion.
-#include "wire_cell_arrow/Converters.h"
+#include "wire_cell_arrow/Converters.hpp"
 #include <arrow/api.h>
 #include <iostream>
 
