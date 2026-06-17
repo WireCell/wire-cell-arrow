@@ -5,9 +5,9 @@ unqualified `arrow::` is Apache Arrow).  Converters return `arrow::Result<…>`;
 check `.ok()` (or use `ARROW_ASSIGN_OR_RAISE` / `.ValueOrDie()` in tests).
 
 ```cpp
-#include "wire_cell_arrow/Converters.h"   // to_arrow(...), *_schema(), Ops via Ops.h
-#include "wire_cell_arrow/ArrowFrame.h"   // and ArrowTrace/Depo/Tensor/DepoSet/TensorSet
-#include "wire_cell_arrow/Ops.h"
+#include "wire_cell_arrow/Converters.hpp"   // to_arrow(...), *_schema(), Ops via Ops.h
+#include "wire_cell_arrow/ArrowFrame.hpp"   // and ArrowTrace/Depo/Tensor/DepoSet/TensorSet
+#include "wire_cell_arrow/Ops.hpp"
 ```
 
 ## ITrace ↔ Arrow

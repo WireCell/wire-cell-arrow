@@ -97,7 +97,7 @@ Collection facades build the per-element facades lazily and cache them; the
 
 ## Collection operators
 
-`Ops.{h,cpp}` provides decompose/reassemble pairs (`frame_to_traces` /
+`Ops.{hpp,cpp}` provides decompose/reassemble pairs (`frame_to_traces` /
 `traces_to_frame`, etc.).  Decomposition is a per-row `RecordBatch::Slice`
 (zero-copy: slices share the parent buffers); reassembly concatenates the row
 batches column-wise and relabels the schema metadata.  These act on the trace /
