@@ -18,10 +18,13 @@
 #include "WireCellUtil/Point.h"
 #include "WireCellUtil/Waveform.h"
 
+#include <arrow/api.h>
+
 #include <cstring>
 #include <iostream>
 #include <memory>
 #include <set>
+#include <string>
 #include <vector>
 
 namespace wcatest {
@@ -123,6 +126,31 @@ inline bool cmp(bool ok, const char* what)
 {
     if (!ok) std::cerr << "MISMATCH: " << what << "\n";
     return ok;
+}
+
+// --------------------------------------------------------------------------
+// Arrow structural validation
+//
+// RecordBatch::Make / Table::Make do NOT validate type equality of child
+// fields (nested list/struct mismatches only bite at IPC — see beads memory
+// arrow-nested-list-struct-builder), so every converter result must be passed
+// through ValidateFull() before it is trusted.
+// --------------------------------------------------------------------------
+
+inline bool validate_full(const std::shared_ptr<arrow::RecordBatch>& b, const std::string& what)
+{
+    if (!b) return cmp(false, what.c_str());
+    auto st = b->ValidateFull();
+    if (!st.ok()) std::cerr << "VALIDATE " << what << ": " << st.ToString() << "\n";
+    return st.ok();
+}
+
+inline bool validate_full(const std::shared_ptr<arrow::Table>& t, const std::string& what)
+{
+    if (!t) return cmp(false, what.c_str());
+    auto st = t->ValidateFull();
+    if (!st.ok()) std::cerr << "VALIDATE " << what << ": " << st.ToString() << "\n";
+    return st.ok();
 }
 
 inline bool trace_equal(const ITrace& a, const ITrace& b)

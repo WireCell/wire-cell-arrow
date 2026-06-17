@@ -8,7 +8,9 @@ This package provides:
 - `ArrowXxx` concrete classes implementing WCT interfaces as lazy facades over Arrow objects
 - Collection operators for decomposing and reassembling Arrow container types
 
-See `docs/design.md` for schema rationale and `docs/api.md` for usage examples.
+See `docs/design.md` for schema rationale, `docs/api.md` for usage examples,
+and `docs/fidelity.md` for the per-type round-trip fidelity notes (what each
+converter preserves, normalizes, or drops).
 
 ## Prerequisites
 
