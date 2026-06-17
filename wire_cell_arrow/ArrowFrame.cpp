@@ -27,6 +27,7 @@ ArrowFrame::ArrowFrame(FrameTables tables)
     auto br = table_to_batch(m_tables.traces);
     if (!br.ok()) throw std::runtime_error("ArrowFrame: " + br.status().ToString());
     m_trace_batch = *br;
+    require_readable_schema(m_trace_batch->schema(), "wc.frame");
 
     // Frame scalars from schema metadata.
     const std::string sid = meta_get(m_trace_batch, "wc.frame.ident");

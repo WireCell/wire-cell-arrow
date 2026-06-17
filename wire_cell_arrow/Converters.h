@@ -105,6 +105,34 @@ arrow::Result<std::shared_ptr<arrow::Table>>
 to_arrow(const WireCell::ITensorSet::pointer& tensorset);
 
 // ---------------------------------------------------------------------------
+// Semantic schema versioning / governance (ddm-c3s.9)
+//
+// Every wc.* schema carries its semantic version in schema metadata under
+// `kSchemaVersionKey`, paired with the `kSchemaNameKey` ("arrow.schema") name.
+// The version is a single integer (a "generation"): additive, backward-safe
+// changes keep it; a breaking change bumps it.  See docs/schema-versioning.md
+// for the compatibility policy and the schema registry.
+// ---------------------------------------------------------------------------
+
+/// The semantic schema version produced by this build of wire-cell-arrow.
+inline constexpr int kSchemaVersion = 1;
+inline constexpr char kSchemaNameKey[] = "arrow.schema";
+inline constexpr char kSchemaVersionKey[] = "arrow.schema.version";
+
+/// The semantic schema version recorded in `schema`'s metadata, or 0 when the
+/// schema is unversioned (legacy, pre-versioning).
+int schema_version(const std::shared_ptr<arrow::Schema>& schema);
+
+/// Reader-side version gate (deliverable 4).  Accepts a schema whose version is
+/// <= this build's kSchemaVersion — older files stay forward-readable because
+/// schema changes within a major version are additive — and accepts an
+/// unversioned (0) schema best-effort.  Throws std::runtime_error when the
+/// schema's version is NEWER than this build understands.  `context` names the
+/// schema for the diagnostic.
+void require_readable_schema(const std::shared_ptr<arrow::Schema>& schema,
+                             const std::string& context);
+
+// ---------------------------------------------------------------------------
 // wc.frame
 // ---------------------------------------------------------------------------
 

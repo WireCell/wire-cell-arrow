@@ -1,4 +1,5 @@
 #include "wire_cell_arrow/ArrowTrace.h"
+#include "wire_cell_arrow/Converters.h"
 
 #include <stdexcept>
 #include <string>
@@ -15,6 +16,7 @@ ArrowTrace::ArrowTrace(std::shared_ptr<arrow::RecordBatch> batch, int64_t row)
     if (m_row < 0 || m_row >= m_batch->num_rows()) {
         throw std::invalid_argument("ArrowTrace: row " + std::to_string(m_row) + " out of range");
     }
+    require_readable_schema(m_batch->schema(), "wc.trace");
 
     auto chan = m_batch->GetColumnByName("wc.trace.channel");
     if (!chan || chan->type_id() != arrow::Type::INT32) {

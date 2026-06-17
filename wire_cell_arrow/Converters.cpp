@@ -3,12 +3,71 @@
 #include "WireCellUtil/Persist.h"
 
 #include <charconv>
+#include <stdexcept>
+#include <string>
+#include <vector>
 
 namespace WireCell::Arrow {
 
+namespace {
+
+// Build the semantic schema metadata for `name`: the schema name + version
+// (kSchemaNameKey / kSchemaVersionKey) plus any caller-supplied extra keys.
+// Centralizing this guarantees every wc.* schema is versioned identically.
+std::shared_ptr<arrow::KeyValueMetadata> semantic_metadata(
+    const std::string& name,
+    std::vector<std::string> extra_keys = {},
+    std::vector<std::string> extra_vals = {})
+{
+    std::vector<std::string> keys{kSchemaNameKey, kSchemaVersionKey};
+    std::vector<std::string> vals{name, std::to_string(kSchemaVersion)};
+    keys.insert(keys.end(), std::make_move_iterator(extra_keys.begin()),
+                std::make_move_iterator(extra_keys.end()));
+    vals.insert(vals.end(), std::make_move_iterator(extra_vals.begin()),
+                std::make_move_iterator(extra_vals.end()));
+    return std::make_shared<arrow::KeyValueMetadata>(std::move(keys), std::move(vals));
+}
+
+}  // namespace
+
+int schema_version(const std::shared_ptr<arrow::Schema>& schema)
+{
+    if (!schema) return 0;
+    auto md = schema->metadata();
+    if (!md) return 0;
+    const int i = md->FindKey(kSchemaVersionKey);
+    if (i < 0) return 0;
+    try {
+        return std::stoi(md->value(i));
+    }
+    catch (...) {
+        return 0;
+    }
+}
+
+void require_readable_schema(const std::shared_ptr<arrow::Schema>& schema,
+                             const std::string& context)
+{
+    const int v = schema_version(schema);
+    if (v > kSchemaVersion) {
+        // Prefer the schema's own recorded name; fall back to the caller's hint.
+        std::string name = context;
+        if (schema) {
+            if (auto md = schema->metadata()) {
+                const int i = md->FindKey(kSchemaNameKey);
+                if (i >= 0) name = md->value(i);
+            }
+        }
+        throw std::runtime_error(
+            "wire-cell-arrow: " + name + " schema version " + std::to_string(v) +
+            " is newer than this build supports (version " + std::to_string(kSchemaVersion) +
+            "); upgrade wire-cell-arrow to read this data.");
+    }
+}
+
 std::shared_ptr<arrow::Schema> trace_schema()
 {
-    auto md = arrow::key_value_metadata({{"arrow.schema", "wc.trace"}});
+    auto md = semantic_metadata("wc.trace");
     return arrow::schema(
         {
             arrow::field("wc.trace.channel", arrow::int32(), /*nullable=*/false),
@@ -73,7 +132,7 @@ std::shared_ptr<arrow::DataType> depo_struct_type()
 
 std::shared_ptr<arrow::Schema> depo_schema()
 {
-    auto md = arrow::key_value_metadata({{"arrow.schema", "wc.depo"}});
+    auto md = semantic_metadata("wc.depo");
     return arrow::schema(
         {
             arrow::field("wc.depo.time",        arrow::float64(), /*nullable=*/false),
@@ -199,10 +258,7 @@ std::shared_ptr<arrow::Schema> deposet_schema(int ident)
 {
     // Same columns as wc.depo; differ only by schema metadata.
     auto base = depo_schema();
-    auto md = arrow::key_value_metadata({
-        {"arrow.schema",      "wc.deposet"},
-        {"wc.deposet.ident",  std::to_string(ident)},
-    });
+    auto md = semantic_metadata("wc.deposet", {"wc.deposet.ident"}, {std::to_string(ident)});
     return arrow::schema(base->fields(), md);
 }
 
@@ -228,7 +284,7 @@ to_arrow(const WireCell::IDepoSet::pointer& deposet)
 
 std::shared_ptr<arrow::Schema> tensor_schema()
 {
-    auto md = arrow::key_value_metadata({{"arrow.schema", "wc.tensor"}});
+    auto md = semantic_metadata("wc.tensor");
     return arrow::schema(
         {
             arrow::field("wc.tensor.data",     arrow::large_binary(),       /*nullable=*/false),
@@ -307,13 +363,13 @@ to_arrow(const WireCell::ITensor::pointer& tensor)
 std::shared_ptr<arrow::Schema> tensorset_schema(int ident, const std::string& metadata_json)
 {
     auto base = tensor_schema();
-    std::vector<std::string> keys = {"arrow.schema", "wc.tensorset.ident"};
-    std::vector<std::string> vals = {"wc.tensorset", std::to_string(ident)};
+    std::vector<std::string> keys = {"wc.tensorset.ident"};
+    std::vector<std::string> vals = {std::to_string(ident)};
     if (!metadata_json.empty()) {
         keys.push_back("wc.tensorset.metadata");
         vals.push_back(metadata_json);
     }
-    auto md = std::make_shared<arrow::KeyValueMetadata>(std::move(keys), std::move(vals));
+    auto md = semantic_metadata("wc.tensorset", std::move(keys), std::move(vals));
     return arrow::schema(base->fields(), md);
 }
 
@@ -375,12 +431,10 @@ namespace {
 std::shared_ptr<arrow::KeyValueMetadata> frame_metadata(const std::string& schema_name,
                                                         const WireCell::IFrame::pointer& f)
 {
-    return arrow::key_value_metadata({
-        {"arrow.schema",   schema_name},
-        {"wc.frame.ident", std::to_string(f->ident())},
-        {"wc.frame.time",  hexfloat(f->time())},
-        {"wc.frame.tick",  hexfloat(f->tick())},
-    });
+    return semantic_metadata(
+        schema_name,
+        {"wc.frame.ident", "wc.frame.time", "wc.frame.tick"},
+        {std::to_string(f->ident()), hexfloat(f->time()), hexfloat(f->tick())});
 }
 
 // wc.frame.frame_tags : one row per frame tag.
@@ -394,7 +448,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> build_frame_tags(const WireCell::IF
     ARROW_RETURN_NOT_OK(tag_b.Finish(&a));
     auto schema = arrow::schema(
         {arrow::field("wc.frame.frame_tags.tag", arrow::utf8(), false)},
-        arrow::key_value_metadata({{"arrow.schema", "wc.frame.frame_tags"}}));
+        semantic_metadata("wc.frame.frame_tags"));
     return arrow::Table::Make(schema, {a});
 }
 
@@ -437,7 +491,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> build_trace_tags(const WireCell::IF
             arrow::field("wc.frame.trace_tags.trace_index", arrow::list(arrow::int64()),   false),
             arrow::field("wc.frame.trace_tags.summary",     arrow::list(arrow::float64()), /*nullable=*/true),
         },
-        arrow::key_value_metadata({{"arrow.schema", "wc.frame.trace_tags"}}));
+        semantic_metadata("wc.frame.trace_tags"));
     return arrow::Table::Make(schema, {a_tag, a_ti, a_sm});
 }
 
@@ -471,7 +525,7 @@ arrow::Result<std::shared_ptr<arrow::Table>> build_cmm(const WireCell::IFrame::p
             arrow::field("wc.frame.cmm.bin_start", arrow::int32(), false),
             arrow::field("wc.frame.cmm.bin_end",   arrow::int32(), false),
         },
-        arrow::key_value_metadata({{"arrow.schema", "wc.frame.cmm"}}));
+        semantic_metadata("wc.frame.cmm"));
     return arrow::Table::Make(schema, {a_label, a_chan, a_lo, a_hi});
 }
 

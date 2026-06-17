@@ -1,4 +1,5 @@
 #include "wire_cell_arrow/ArrowTensor.h"
+#include "wire_cell_arrow/Converters.h"
 
 #include "WireCellUtil/Persist.h"
 
@@ -49,6 +50,7 @@ ArrowTensor::ArrowTensor(std::shared_ptr<arrow::RecordBatch> batch, int64_t row)
     if (!m_batch) throw std::invalid_argument("ArrowTensor: null batch");
     if (m_row < 0 || m_row >= m_batch->num_rows())
         throw std::invalid_argument("ArrowTensor: row " + std::to_string(m_row) + " out of range");
+    require_readable_schema(m_batch->schema(), "wc.tensor");
 
     auto byname = [&](const std::string& n) { return m_batch->GetColumnByName(n); };
 

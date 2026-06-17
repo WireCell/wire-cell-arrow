@@ -9,8 +9,9 @@ This package provides:
 - Collection operators for decomposing and reassembling Arrow container types
 
 See `docs/design.md` for schema rationale, `docs/api.md` for usage examples,
-and `docs/fidelity.md` for the per-type round-trip fidelity notes (what each
-converter preserves, normalizes, or drops).
+`docs/fidelity.md` for the per-type round-trip fidelity notes (what each
+converter preserves, normalizes, or drops), and `docs/schema-versioning.md` for
+the semantic schema version, compatibility policy, and schema registry.
 
 ## Prerequisites
 

@@ -12,6 +12,7 @@ ArrowDepoSet::ArrowDepoSet(std::shared_ptr<arrow::Table> table)
     auto br = table_to_batch(table);
     if (!br.ok()) throw std::runtime_error("ArrowDepoSet: " + br.status().ToString());
     m_batch = *br;
+    require_readable_schema(m_batch->schema(), "wc.deposet");
     if (auto md = m_batch->schema()->metadata()) {
         auto got = md->Get("wc.deposet.ident");
         if (got.ok()) m_ident = std::stoi(*got);

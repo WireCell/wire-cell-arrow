@@ -124,6 +124,12 @@ target_link_libraries(test_roundtrip PRIVATE wire_cell_arrow
   Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME roundtrip COMMAND test_roundtrip)
 
+# Semantic schema versioning / governance (ddm-c3s.9).
+add_executable(test_schema_version test_schema_version.cpp)
+target_link_libraries(test_schema_version PRIVATE wire_cell_arrow
+  Arrow::arrow_shared WireCell::Aux WireCell::Util ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME schema_version COMMAND test_schema_version)
+
 # Collection operator tests (ddm-8t5).
 add_executable(test_collection_ops test_collection_ops.cpp)
 target_link_libraries(test_collection_ops PRIVATE wire_cell_arrow

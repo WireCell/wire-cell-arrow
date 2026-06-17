@@ -14,6 +14,7 @@ ArrowTensorSet::ArrowTensorSet(std::shared_ptr<arrow::Table> table)
     auto br = table_to_batch(table);
     if (!br.ok()) throw std::runtime_error("ArrowTensorSet: " + br.status().ToString());
     m_batch = *br;
+    require_readable_schema(m_batch->schema(), "wc.tensorset");
     if (auto md = m_batch->schema()->metadata()) {
         auto id = md->Get("wc.tensorset.ident");
         if (id.ok()) m_ident = std::stoi(*id);
