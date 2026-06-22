@@ -46,7 +46,6 @@ endforeach()
 # ArrowConfig.cmake under lib/cmake/Arrow), so no custom finder is needed.
 find_package(Arrow CONFIG REQUIRED)
 find_package(WireCell REQUIRED)
-find_package(Boost REQUIRED COMPONENTS json)
 
 add_compile_options(-Wall -Wpedantic -Werror)
 
@@ -86,7 +85,6 @@ target_link_libraries(wire_cell_arrow
     WireCell::Iface
     WireCell::Aux
     WireCell::Util
-    Boost::json
 )
 
 # ---------------------------------------------------------------------------
