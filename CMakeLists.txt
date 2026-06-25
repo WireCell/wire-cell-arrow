@@ -28,19 +28,18 @@ list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
 # Fix: explicitly link the Spack libstdc++.so.6 (resolved from the symlink in
 # the view's lib/ dir) for any target that needs it, and propagate it via the
 # WIRECELL_RUNTIME_LIBS variable used in test/CMakeLists.txt.
-set(WIRECELL_RUNTIME_LIBS "")
-foreach(_prefix IN LISTS CMAKE_PREFIX_PATH)
-  if(EXISTS "${_prefix}/lib/libstdc++.so.6")
-    link_directories(BEFORE "${_prefix}/lib")
-    file(REAL_PATH "${_prefix}/lib/libstdc++.so.6" _stdc_real)
-    get_filename_component(_stdc_dir "${_stdc_real}" DIRECTORY)
-    # Use the full .so.6 path (no bare -lstdc++ symlink in Spack runtime dirs).
-    set(WIRECELL_RUNTIME_LIBS "${_stdc_real}")
-    string(APPEND CMAKE_EXE_LINKER_FLAGS
-      " -Wl,-rpath,${_stdc_dir}")
-    break()
-  endif()
-endforeach()
+# Resolve THIS compiler's libstdc++ directly, independent of CMAKE_PREFIX_PATH
+# order. A Spack build can place an older gcc-runtime earlier on the path; the
+# previous prefix scan grabbed that, linking gcc@15 objects against gcc@11
+# libstdc++ (missing GLIBCXX_3.4.31/.32). The compiler always yields its own.
+execute_process(
+  COMMAND "${CMAKE_CXX_COMPILER}" -print-file-name=libstdc++.so
+  OUTPUT_VARIABLE _stdc_real OUTPUT_STRIP_TRAILING_WHITESPACE)
+file(REAL_PATH "${_stdc_real}" _stdc_real)
+get_filename_component(_stdc_dir "${_stdc_real}" DIRECTORY)
+set(WIRECELL_RUNTIME_LIBS "${_stdc_real}")
+link_directories(BEFORE "${_stdc_dir}")
+string(APPEND CMAKE_EXE_LINKER_FLAGS " -Wl,-rpath,${_stdc_dir}")
 
 # Apache Arrow ships its own CMake package config (Arrow provides
 # ArrowConfig.cmake under lib/cmake/Arrow), so no custom finder is needed.
