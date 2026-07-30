@@ -279,6 +279,90 @@ to_arrow(const WireCell::IDepoSet::pointer& deposet)
 }
 
 // ---------------------------------------------------------------------------
+// wc.tracksegment / wc.tracksegmentset
+// ---------------------------------------------------------------------------
+
+std::shared_ptr<arrow::Schema> tracksegment_schema()
+{
+    auto md = semantic_metadata("wc.tracksegment");
+    return arrow::schema(
+        {
+            arrow::field("wc.tracksegment.start_x",      arrow::float64(), /*nullable=*/false),
+            arrow::field("wc.tracksegment.start_y",      arrow::float64(), false),
+            arrow::field("wc.tracksegment.start_z",      arrow::float64(), false),
+            arrow::field("wc.tracksegment.start_t",      arrow::float64(), false),
+            arrow::field("wc.tracksegment.stop_x",       arrow::float64(), false),
+            arrow::field("wc.tracksegment.stop_y",       arrow::float64(), false),
+            arrow::field("wc.tracksegment.stop_z",       arrow::float64(), false),
+            arrow::field("wc.tracksegment.stop_t",       arrow::float64(), false),
+            arrow::field("wc.tracksegment.energy",       arrow::float64(), false),
+            arrow::field("wc.tracksegment.secondary",    arrow::float64(), false),
+            arrow::field("wc.tracksegment.n_electrons",  arrow::float64(), false),
+            arrow::field("wc.tracksegment.track_length", arrow::float64(), false),
+            arrow::field("wc.tracksegment.id",           arrow::int32(),   false),
+            arrow::field("wc.tracksegment.pdg",          arrow::int32(),   false),
+        },
+        md);
+}
+
+std::shared_ptr<arrow::Schema> tracksegmentset_schema(int ident)
+{
+    // Same columns as wc.tracksegment; differ only by schema metadata.
+    auto base = tracksegment_schema();
+    auto md = semantic_metadata("wc.tracksegmentset", {"wc.tracksegmentset.ident"},
+                                {std::to_string(ident)});
+    return arrow::schema(base->fields(), md);
+}
+
+arrow::Result<std::shared_ptr<arrow::Table>>
+to_arrow(const WireCell::ITrackSegmentSet::pointer& segset)
+{
+    auto* pool = arrow::default_memory_pool();
+    arrow::DoubleBuilder start_x(pool), start_y(pool), start_z(pool), start_t(pool);
+    arrow::DoubleBuilder stop_x(pool), stop_y(pool), stop_z(pool), stop_t(pool);
+    arrow::DoubleBuilder energy(pool), secondary(pool), n_electrons(pool), track_length(pool);
+    arrow::Int32Builder id(pool), pdg(pool);
+
+    auto segments = segset->segments();
+    const int64_t nrows = segments ? static_cast<int64_t>(segments->size()) : 0;
+    if (segments) {
+        for (const auto& seg : *segments) {
+            ARROW_RETURN_NOT_OK(start_x.Append(seg->start().x()));
+            ARROW_RETURN_NOT_OK(start_y.Append(seg->start().y()));
+            ARROW_RETURN_NOT_OK(start_z.Append(seg->start().z()));
+            ARROW_RETURN_NOT_OK(start_t.Append(seg->start_time()));
+            ARROW_RETURN_NOT_OK(stop_x.Append(seg->stop().x()));
+            ARROW_RETURN_NOT_OK(stop_y.Append(seg->stop().y()));
+            ARROW_RETURN_NOT_OK(stop_z.Append(seg->stop().z()));
+            ARROW_RETURN_NOT_OK(stop_t.Append(seg->stop_time()));
+            ARROW_RETURN_NOT_OK(energy.Append(seg->energy()));
+            ARROW_RETURN_NOT_OK(secondary.Append(seg->secondary()));
+            ARROW_RETURN_NOT_OK(n_electrons.Append(seg->n_electrons()));
+            ARROW_RETURN_NOT_OK(track_length.Append(seg->track_length()));
+            ARROW_RETURN_NOT_OK(id.Append(seg->id()));
+            ARROW_RETURN_NOT_OK(pdg.Append(seg->pdg()));
+        }
+    }
+
+    std::vector<std::shared_ptr<arrow::Array>> cols(14);
+    ARROW_RETURN_NOT_OK(start_x.Finish(&cols[0]));
+    ARROW_RETURN_NOT_OK(start_y.Finish(&cols[1]));
+    ARROW_RETURN_NOT_OK(start_z.Finish(&cols[2]));
+    ARROW_RETURN_NOT_OK(start_t.Finish(&cols[3]));
+    ARROW_RETURN_NOT_OK(stop_x.Finish(&cols[4]));
+    ARROW_RETURN_NOT_OK(stop_y.Finish(&cols[5]));
+    ARROW_RETURN_NOT_OK(stop_z.Finish(&cols[6]));
+    ARROW_RETURN_NOT_OK(stop_t.Finish(&cols[7]));
+    ARROW_RETURN_NOT_OK(energy.Finish(&cols[8]));
+    ARROW_RETURN_NOT_OK(secondary.Finish(&cols[9]));
+    ARROW_RETURN_NOT_OK(n_electrons.Finish(&cols[10]));
+    ARROW_RETURN_NOT_OK(track_length.Finish(&cols[11]));
+    ARROW_RETURN_NOT_OK(id.Finish(&cols[12]));
+    ARROW_RETURN_NOT_OK(pdg.Finish(&cols[13]));
+    return arrow::Table::Make(tracksegmentset_schema(segset->ident()), cols, nrows);
+}
+
+// ---------------------------------------------------------------------------
 // wc.tensor
 // ---------------------------------------------------------------------------
 

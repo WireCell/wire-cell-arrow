@@ -4,6 +4,7 @@
 #include "WireCellIface/ITrace.h"
 #include "WireCellIface/IDepo.h"
 #include "WireCellIface/IDepoSet.h"
+#include "WireCellIface/ITrackSegmentSet.h"
 #include "WireCellIface/ITensor.h"
 #include "WireCellIface/ITensorSet.h"
 #include "WireCellIface/IFrame.h"
@@ -74,6 +75,28 @@ std::shared_ptr<arrow::Schema> deposet_schema(int ident);
 /// schema as wc.depo, priors nested per row), set ident in schema metadata.
 arrow::Result<std::shared_ptr<arrow::Table>>
 to_arrow(const WireCell::IDepoSet::pointer& deposet);
+
+/// The canonical Arrow schema for a wc.tracksegment RecordBatch: one row per
+/// track segment.
+///
+/// Columns (all non-null): wc.tracksegment.{start_x,start_y,start_z,start_t,
+/// stop_x,stop_y,stop_z,stop_t,energy,secondary,n_electrons,track_length}
+/// float64 and wc.tracksegment.{id,pdg} int32.  Schema metadata
+/// arrow.schema = "wc.tracksegment".  Column semantics (unknown-value
+/// conventions included) follow ITrackSegment.
+///
+/// This same column set is reused as the rows of wc.tracksegmentset.
+std::shared_ptr<arrow::Schema> tracksegment_schema();
+
+/// The wc.tracksegmentset schema: identical columns to wc.tracksegment, but
+/// schema metadata arrow.schema = "wc.tracksegmentset" and
+/// wc.tracksegmentset.ident = <ident>.
+std::shared_ptr<arrow::Schema> tracksegmentset_schema(int ident);
+
+/// Convert an ITrackSegmentSet to a wc.tracksegmentset Table: one row per
+/// segment, set ident in schema metadata.
+arrow::Result<std::shared_ptr<arrow::Table>>
+to_arrow(const WireCell::ITrackSegmentSet::pointer& segset);
 
 /// The canonical Arrow schema for a wc.tensor RecordBatch: one row per tensor.
 ///

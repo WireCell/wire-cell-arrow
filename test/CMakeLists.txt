@@ -138,3 +138,11 @@ add_test(NAME collection_ops COMMAND test_collection_ops)
 
 # Further Arrow+WCT round-trip tests are added by the converter/facade test
 # issues.
+
+# wc.tracksegmentset converter + facade round-trip (xerosere ddm-69y.11).
+add_executable(test_tracksegment_converter test_tracksegment_converter.cpp)
+target_link_libraries(test_tracksegment_converter PRIVATE wire_cell_arrow
+  Arrow::arrow_shared
+  WireCell::Aux
+  ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME tracksegment_converter COMMAND test_tracksegment_converter)
