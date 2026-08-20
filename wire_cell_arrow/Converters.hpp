@@ -107,6 +107,7 @@ to_arrow(const WireCell::ITrackSegmentSet::pointer& segset);
 ///   wc.blobs.blobset_index : int32   (index of the IBlobSet in the vector)
 ///   wc.blobs.slice_ident   : int32   (set->slice()->ident(); -1 if null slice)
 ///   wc.blobs.slice_start   : float64 (set->slice()->start(); 0.0 if null slice)
+///   wc.blobs.slice_span    : float64 (set->slice()->span(); 0.0 if null slice)
 ///   wc.blobs.blobset_ident : int32   (set->ident())
 ///   wc.blob.ident          : int32   (blob->ident())
 ///   wc.blob.value          : float32 (blob->value())
@@ -116,7 +117,10 @@ to_arrow(const WireCell::ITrackSegmentSet::pointer& segset);
 ///   wc.blob.strips  : list<struct<layer:int32, lo:int32, hi:int32>> — every
 ///     strip of blob->shape() (all layers), half-open ray bounds [lo, hi).
 ///   wc.blob.corners : list<struct<layer1:int32, ray1:int32, layer2:int32,
-///     ray2:int32>> — the blob shape's pair-wise ray crossings (ray == grid).
+///     ray2:int32, y:float64, z:float64>> — the blob shape's pair-wise ray
+///     crossings (ray == grid) plus the crossing's PHYSICAL transverse (y,z) in
+///     mm (via face->raygrid().ray_crossing; 0,0 for a null-face blob), so a
+///     point cloud can be sampled without the wire geometry.
 /// Schema metadata arrow.schema = "wc.blobs".  Per-set / per-blob idents are
 /// carried as columns (there is no single set ident for a vector), so this
 /// builder takes no ident argument.  wire-cell-phlex-arrow re-stamps a foreign
