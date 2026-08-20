@@ -5,6 +5,7 @@
 #include "WireCellIface/IDepo.h"
 #include "WireCellIface/IDepoSet.h"
 #include "WireCellIface/ITrackSegmentSet.h"
+#include "WireCellIface/IBlobSet.h"
 #include "WireCellIface/ITensor.h"
 #include "WireCellIface/ITensorSet.h"
 #include "WireCellIface/IFrame.h"
@@ -97,6 +98,36 @@ std::shared_ptr<arrow::Schema> tracksegmentset_schema(int ident);
 /// segment, set ident in schema metadata.
 arrow::Result<std::shared_ptr<arrow::Table>>
 to_arrow(const WireCell::ITrackSegmentSet::pointer& segset);
+
+/// The canonical Arrow schema for a wc.blobs Table: one row per IBlob across a
+/// whole vector of IBlobSet (whose elements span time slices).
+///
+/// Scalar columns (all non-null):
+///   wc.blobs.blobset_index : int32   (index of the IBlobSet in the vector)
+///   wc.blobs.slice_ident   : int32   (set->slice()->ident(); -1 if null slice)
+///   wc.blobs.slice_start   : float64 (set->slice()->start(); 0.0 if null slice)
+///   wc.blobs.blobset_ident : int32   (set->ident())
+///   wc.blob.ident          : int32   (blob->ident())
+///   wc.blob.value          : float32 (blob->value())
+///   wc.blob.uncertainty    : float32 (blob->uncertainty())
+///   wc.blob.face_ident     : int32   (blob->face()->ident(); -1 if null face)
+/// Nested list columns (one list per row):
+///   wc.blob.strips  : list<struct<layer:int32, lo:int32, hi:int32>> — every
+///     strip of blob->shape() (all layers), half-open ray bounds [lo, hi).
+///   wc.blob.corners : list<struct<layer1:int32, ray1:int32, layer2:int32,
+///     ray2:int32>> — the blob shape's pair-wise ray crossings (ray == grid).
+/// Schema metadata arrow.schema = "wc.blobs".  Per-set / per-blob idents are
+/// carried as columns (there is no single set ident for a vector), so this
+/// builder takes no ident argument.  wire-cell-phlex-arrow re-stamps a foreign
+/// table with blobs_schema()->metadata().
+std::shared_ptr<arrow::Schema> blobs_schema();
+
+/// Convert a vector of IBlobSet to a wc.blobs Table: iterate the vector with an
+/// index, and for each set iterate its blobs(), emitting one row per blob.  A
+/// null set or null blob is skipped; a null slice/face yields the sentinel
+/// scalar values described in blobs_schema().
+arrow::Result<std::shared_ptr<arrow::Table>>
+to_arrow(const WireCell::IBlobSet::vector& blobsets);
 
 /// The canonical Arrow schema for a wc.tensor RecordBatch: one row per tensor.
 ///

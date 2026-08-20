@@ -146,3 +146,12 @@ target_link_libraries(test_tracksegment_converter PRIVATE wire_cell_arrow
   WireCell::Aux
   ${WIRECELL_RUNTIME_LIBS})
 add_test(NAME tracksegment_converter COMMAND test_tracksegment_converter)
+
+# wc.blobs write-side converter (xerosere ddm-3bu.1).
+add_executable(test_blobset_converter test_blobset_converter.cpp)
+target_link_libraries(test_blobset_converter PRIVATE wire_cell_arrow
+  Arrow::arrow_shared
+  WireCell::Aux
+  WireCell::Util
+  ${WIRECELL_RUNTIME_LIBS})
+add_test(NAME blobset_converter COMMAND test_blobset_converter)

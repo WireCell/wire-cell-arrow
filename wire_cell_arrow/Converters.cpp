@@ -363,6 +363,149 @@ to_arrow(const WireCell::ITrackSegmentSet::pointer& segset)
 }
 
 // ---------------------------------------------------------------------------
+// wc.blobs
+// ---------------------------------------------------------------------------
+
+namespace {
+// The struct<> element types for the wc.blob.strips / wc.blob.corners lists.
+std::shared_ptr<arrow::DataType> strip_struct_type()
+{
+    return arrow::struct_({
+        arrow::field("layer", arrow::int32(), /*nullable=*/false),
+        arrow::field("lo",    arrow::int32(), false),
+        arrow::field("hi",    arrow::int32(), false),
+    });
+}
+std::shared_ptr<arrow::DataType> corner_struct_type()
+{
+    return arrow::struct_({
+        arrow::field("layer1", arrow::int32(), /*nullable=*/false),
+        arrow::field("ray1",   arrow::int32(), false),
+        arrow::field("layer2", arrow::int32(), false),
+        arrow::field("ray2",   arrow::int32(), false),
+    });
+}
+}  // namespace
+
+std::shared_ptr<arrow::Schema> blobs_schema()
+{
+    auto md = semantic_metadata("wc.blobs");
+    return arrow::schema(
+        {
+            arrow::field("wc.blobs.blobset_index", arrow::int32(),   /*nullable=*/false),
+            arrow::field("wc.blobs.slice_ident",   arrow::int32(),   false),
+            arrow::field("wc.blobs.slice_start",   arrow::float64(), false),
+            arrow::field("wc.blobs.blobset_ident", arrow::int32(),   false),
+            arrow::field("wc.blob.ident",          arrow::int32(),   false),
+            arrow::field("wc.blob.value",          arrow::float32(), false),
+            arrow::field("wc.blob.uncertainty",    arrow::float32(), false),
+            arrow::field("wc.blob.face_ident",     arrow::int32(),   false),
+            // arrow::list(struct) yields list<item: struct (nullable)>, matching
+            // the ListBuilder(StructBuilder) output type built below.
+            arrow::field("wc.blob.strips",         arrow::list(strip_struct_type()),  false),
+            arrow::field("wc.blob.corners",        arrow::list(corner_struct_type()), false),
+        },
+        md);
+}
+
+arrow::Result<std::shared_ptr<arrow::Table>>
+to_arrow(const WireCell::IBlobSet::vector& blobsets)
+{
+    auto* pool = arrow::default_memory_pool();
+
+    arrow::Int32Builder blobset_index(pool), slice_ident(pool), blobset_ident(pool);
+    arrow::DoubleBuilder slice_start(pool);
+    arrow::Int32Builder blob_ident(pool), face_ident(pool);
+    arrow::FloatBuilder value(pool), uncertainty(pool);
+
+    // wc.blob.strips : list<struct<layer, lo, hi>>
+    std::vector<std::shared_ptr<arrow::ArrayBuilder>> strip_fields = {
+        std::make_shared<arrow::Int32Builder>(pool),
+        std::make_shared<arrow::Int32Builder>(pool),
+        std::make_shared<arrow::Int32Builder>(pool),
+    };
+    auto strip_sb = std::make_shared<arrow::StructBuilder>(strip_struct_type(), pool, strip_fields);
+    arrow::ListBuilder strips_b(pool, strip_sb);
+
+    // wc.blob.corners : list<struct<layer1, ray1, layer2, ray2>>
+    std::vector<std::shared_ptr<arrow::ArrayBuilder>> corner_fields = {
+        std::make_shared<arrow::Int32Builder>(pool),
+        std::make_shared<arrow::Int32Builder>(pool),
+        std::make_shared<arrow::Int32Builder>(pool),
+        std::make_shared<arrow::Int32Builder>(pool),
+    };
+    auto corner_sb = std::make_shared<arrow::StructBuilder>(corner_struct_type(), pool, corner_fields);
+    arrow::ListBuilder corners_b(pool, corner_sb);
+
+    int64_t nrows = 0;
+    for (size_t iset = 0; iset < blobsets.size(); ++iset) {
+        const auto& set = blobsets[iset];
+        if (!set) continue;
+        auto slice = set->slice();
+        const int32_t s_ident = slice ? slice->ident() : -1;
+        const double  s_start = slice ? slice->start() : 0.0;
+        const int32_t bs_ident = set->ident();
+
+        for (const auto& blob : set->blobs()) {
+            if (!blob) continue;
+
+            ARROW_RETURN_NOT_OK(blobset_index.Append(static_cast<int32_t>(iset)));
+            ARROW_RETURN_NOT_OK(slice_ident.Append(s_ident));
+            ARROW_RETURN_NOT_OK(slice_start.Append(s_start));
+            ARROW_RETURN_NOT_OK(blobset_ident.Append(bs_ident));
+            ARROW_RETURN_NOT_OK(blob_ident.Append(blob->ident()));
+            ARROW_RETURN_NOT_OK(value.Append(blob->value()));
+            ARROW_RETURN_NOT_OK(uncertainty.Append(blob->uncertainty()));
+            auto face = blob->face();
+            ARROW_RETURN_NOT_OK(face_ident.Append(face ? face->ident() : -1));
+
+            const auto& shape = blob->shape();
+
+            // Open this row's strips list; append every strip (all layers).
+            ARROW_RETURN_NOT_OK(strips_b.Append());
+            auto* s_layer = static_cast<arrow::Int32Builder*>(strip_sb->field_builder(0));
+            auto* s_lo    = static_cast<arrow::Int32Builder*>(strip_sb->field_builder(1));
+            auto* s_hi    = static_cast<arrow::Int32Builder*>(strip_sb->field_builder(2));
+            for (const auto& strip : shape.strips()) {
+                ARROW_RETURN_NOT_OK(strip_sb->Append());
+                ARROW_RETURN_NOT_OK(s_layer->Append(strip.layer));
+                ARROW_RETURN_NOT_OK(s_lo->Append(strip.bounds.first));
+                ARROW_RETURN_NOT_OK(s_hi->Append(strip.bounds.second));
+            }
+
+            // Open this row's corners list; each crossing is a pair of coords.
+            ARROW_RETURN_NOT_OK(corners_b.Append());
+            auto* c_l1 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(0));
+            auto* c_r1 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(1));
+            auto* c_l2 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(2));
+            auto* c_r2 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(3));
+            for (const auto& corner : shape.corners()) {
+                ARROW_RETURN_NOT_OK(corner_sb->Append());
+                ARROW_RETURN_NOT_OK(c_l1->Append(corner.first.layer));
+                ARROW_RETURN_NOT_OK(c_r1->Append(corner.first.grid));
+                ARROW_RETURN_NOT_OK(c_l2->Append(corner.second.layer));
+                ARROW_RETURN_NOT_OK(c_r2->Append(corner.second.grid));
+            }
+
+            ++nrows;
+        }
+    }
+
+    std::vector<std::shared_ptr<arrow::Array>> cols(10);
+    ARROW_RETURN_NOT_OK(blobset_index.Finish(&cols[0]));
+    ARROW_RETURN_NOT_OK(slice_ident.Finish(&cols[1]));
+    ARROW_RETURN_NOT_OK(slice_start.Finish(&cols[2]));
+    ARROW_RETURN_NOT_OK(blobset_ident.Finish(&cols[3]));
+    ARROW_RETURN_NOT_OK(blob_ident.Finish(&cols[4]));
+    ARROW_RETURN_NOT_OK(value.Finish(&cols[5]));
+    ARROW_RETURN_NOT_OK(uncertainty.Finish(&cols[6]));
+    ARROW_RETURN_NOT_OK(face_ident.Finish(&cols[7]));
+    ARROW_RETURN_NOT_OK(strips_b.Finish(&cols[8]));
+    ARROW_RETURN_NOT_OK(corners_b.Finish(&cols[9]));
+    return arrow::Table::Make(blobs_schema(), cols, nrows);
+}
+
+// ---------------------------------------------------------------------------
 // wc.tensor
 // ---------------------------------------------------------------------------
 
