@@ -6,6 +6,7 @@
 #include "WireCellIface/IDepoSet.h"
 #include "WireCellIface/ITrackSegmentSet.h"
 #include "WireCellIface/IBlobSet.h"
+#include "WireCellIface/ICluster.h"
 #include "WireCellIface/ITensor.h"
 #include "WireCellIface/ITensorSet.h"
 #include "WireCellIface/IFrame.h"
@@ -128,6 +129,13 @@ std::shared_ptr<arrow::Schema> blobs_schema();
 /// scalar values described in blobs_schema().
 arrow::Result<std::shared_ptr<arrow::Table>>
 to_arrow(const WireCell::IBlobSet::vector& blobsets);
+
+/// Convert a 3D-imaging ICluster to the SAME wc.blobs Table, one row per IBlob.
+/// The cluster's 'b' nodes are grouped by their ISlice (each slice becomes one
+/// blobset, ordered by slice start then ident); blobset_ident is the slice ident
+/// (a cluster has no IBlobSet).  Blobs carry solved/filled charge on value().
+arrow::Result<std::shared_ptr<arrow::Table>>
+to_arrow(const WireCell::ICluster::pointer& cluster);
 
 /// The canonical Arrow schema for a wc.tensor RecordBatch: one row per tensor.
 ///

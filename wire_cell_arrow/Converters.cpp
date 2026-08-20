@@ -1,7 +1,9 @@
 #include "wire_cell_arrow/Converters.hpp"
 
+#include "WireCellAux/ClusterHelpers.h"
 #include "WireCellUtil/Persist.h"
 
+#include <algorithm>
 #include <charconv>
 #include <stdexcept>
 #include <string>
@@ -385,6 +387,101 @@ std::shared_ptr<arrow::DataType> corner_struct_type()
         arrow::field("ray2",   arrow::int32(), false),
     });
 }
+
+// N Int32 field-builders for a struct builder (strips: 3, corners: 4).
+std::vector<std::shared_ptr<arrow::ArrayBuilder>> int_fields(arrow::MemoryPool* pool, int n)
+{
+    std::vector<std::shared_ptr<arrow::ArrayBuilder>> v;
+    for (int i = 0; i < n; ++i) {
+        v.push_back(std::make_shared<arrow::Int32Builder>(pool));
+    }
+    return v;
+}
+
+// Shared row builders for the wc.blobs schema (one row per IBlob).  Both the
+// vector<IBlobSet> and the ICluster converters append through this, so they emit
+// a byte-identical table.
+struct BlobRowBuilders {
+    arrow::Int32Builder blobset_index, slice_ident, blobset_ident, blob_ident, face_ident;
+    arrow::DoubleBuilder slice_start;
+    arrow::FloatBuilder value, uncertainty;
+    std::shared_ptr<arrow::StructBuilder> strip_sb;
+    arrow::ListBuilder strips_b;
+    std::shared_ptr<arrow::StructBuilder> corner_sb;
+    arrow::ListBuilder corners_b;
+    int64_t nrows = 0;
+
+    explicit BlobRowBuilders(arrow::MemoryPool* pool)
+      : blobset_index(pool), slice_ident(pool), blobset_ident(pool),
+        blob_ident(pool), face_ident(pool), slice_start(pool), value(pool), uncertainty(pool),
+        strip_sb(std::make_shared<arrow::StructBuilder>(strip_struct_type(), pool, int_fields(pool, 3))),
+        strips_b(pool, strip_sb),
+        corner_sb(std::make_shared<arrow::StructBuilder>(corner_struct_type(), pool, int_fields(pool, 4))),
+        corners_b(pool, corner_sb)
+    {
+    }
+
+    // Append one blob's row.  s_ident/s_start describe the blob's slice (common
+    // to a blobset); bs_ident is the IBlobSet ident (or the slice ident when the
+    // source is an ICluster, which has no IBlobSet node).
+    arrow::Status append(int32_t iset, int32_t s_ident, double s_start, int32_t bs_ident,
+                         const WireCell::IBlob::pointer& blob)
+    {
+        ARROW_RETURN_NOT_OK(blobset_index.Append(iset));
+        ARROW_RETURN_NOT_OK(slice_ident.Append(s_ident));
+        ARROW_RETURN_NOT_OK(slice_start.Append(s_start));
+        ARROW_RETURN_NOT_OK(blobset_ident.Append(bs_ident));
+        ARROW_RETURN_NOT_OK(blob_ident.Append(blob->ident()));
+        ARROW_RETURN_NOT_OK(value.Append(blob->value()));
+        ARROW_RETURN_NOT_OK(uncertainty.Append(blob->uncertainty()));
+        auto face = blob->face();
+        ARROW_RETURN_NOT_OK(face_ident.Append(face ? face->ident() : -1));
+
+        const auto& shape = blob->shape();
+
+        ARROW_RETURN_NOT_OK(strips_b.Append());
+        auto* s_layer = static_cast<arrow::Int32Builder*>(strip_sb->field_builder(0));
+        auto* s_lo    = static_cast<arrow::Int32Builder*>(strip_sb->field_builder(1));
+        auto* s_hi    = static_cast<arrow::Int32Builder*>(strip_sb->field_builder(2));
+        for (const auto& strip : shape.strips()) {
+            ARROW_RETURN_NOT_OK(strip_sb->Append());
+            ARROW_RETURN_NOT_OK(s_layer->Append(strip.layer));
+            ARROW_RETURN_NOT_OK(s_lo->Append(strip.bounds.first));
+            ARROW_RETURN_NOT_OK(s_hi->Append(strip.bounds.second));
+        }
+
+        ARROW_RETURN_NOT_OK(corners_b.Append());
+        auto* c_l1 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(0));
+        auto* c_r1 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(1));
+        auto* c_l2 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(2));
+        auto* c_r2 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(3));
+        for (const auto& corner : shape.corners()) {
+            ARROW_RETURN_NOT_OK(corner_sb->Append());
+            ARROW_RETURN_NOT_OK(c_l1->Append(corner.first.layer));
+            ARROW_RETURN_NOT_OK(c_r1->Append(corner.first.grid));
+            ARROW_RETURN_NOT_OK(c_l2->Append(corner.second.layer));
+            ARROW_RETURN_NOT_OK(c_r2->Append(corner.second.grid));
+        }
+        ++nrows;
+        return arrow::Status::OK();
+    }
+
+    arrow::Result<std::shared_ptr<arrow::Table>> finish()
+    {
+        std::vector<std::shared_ptr<arrow::Array>> cols(10);
+        ARROW_RETURN_NOT_OK(blobset_index.Finish(&cols[0]));
+        ARROW_RETURN_NOT_OK(slice_ident.Finish(&cols[1]));
+        ARROW_RETURN_NOT_OK(slice_start.Finish(&cols[2]));
+        ARROW_RETURN_NOT_OK(blobset_ident.Finish(&cols[3]));
+        ARROW_RETURN_NOT_OK(blob_ident.Finish(&cols[4]));
+        ARROW_RETURN_NOT_OK(value.Finish(&cols[5]));
+        ARROW_RETURN_NOT_OK(uncertainty.Finish(&cols[6]));
+        ARROW_RETURN_NOT_OK(face_ident.Finish(&cols[7]));
+        ARROW_RETURN_NOT_OK(strips_b.Finish(&cols[8]));
+        ARROW_RETURN_NOT_OK(corners_b.Finish(&cols[9]));
+        return arrow::Table::Make(blobs_schema(), cols, nrows);
+    }
+};
 }  // namespace
 
 std::shared_ptr<arrow::Schema> blobs_schema()
@@ -411,33 +508,7 @@ std::shared_ptr<arrow::Schema> blobs_schema()
 arrow::Result<std::shared_ptr<arrow::Table>>
 to_arrow(const WireCell::IBlobSet::vector& blobsets)
 {
-    auto* pool = arrow::default_memory_pool();
-
-    arrow::Int32Builder blobset_index(pool), slice_ident(pool), blobset_ident(pool);
-    arrow::DoubleBuilder slice_start(pool);
-    arrow::Int32Builder blob_ident(pool), face_ident(pool);
-    arrow::FloatBuilder value(pool), uncertainty(pool);
-
-    // wc.blob.strips : list<struct<layer, lo, hi>>
-    std::vector<std::shared_ptr<arrow::ArrayBuilder>> strip_fields = {
-        std::make_shared<arrow::Int32Builder>(pool),
-        std::make_shared<arrow::Int32Builder>(pool),
-        std::make_shared<arrow::Int32Builder>(pool),
-    };
-    auto strip_sb = std::make_shared<arrow::StructBuilder>(strip_struct_type(), pool, strip_fields);
-    arrow::ListBuilder strips_b(pool, strip_sb);
-
-    // wc.blob.corners : list<struct<layer1, ray1, layer2, ray2>>
-    std::vector<std::shared_ptr<arrow::ArrayBuilder>> corner_fields = {
-        std::make_shared<arrow::Int32Builder>(pool),
-        std::make_shared<arrow::Int32Builder>(pool),
-        std::make_shared<arrow::Int32Builder>(pool),
-        std::make_shared<arrow::Int32Builder>(pool),
-    };
-    auto corner_sb = std::make_shared<arrow::StructBuilder>(corner_struct_type(), pool, corner_fields);
-    arrow::ListBuilder corners_b(pool, corner_sb);
-
-    int64_t nrows = 0;
+    BlobRowBuilders b(arrow::default_memory_pool());
     for (size_t iset = 0; iset < blobsets.size(); ++iset) {
         const auto& set = blobsets[iset];
         if (!set) continue;
@@ -445,64 +516,51 @@ to_arrow(const WireCell::IBlobSet::vector& blobsets)
         const int32_t s_ident = slice ? slice->ident() : -1;
         const double  s_start = slice ? slice->start() : 0.0;
         const int32_t bs_ident = set->ident();
-
         for (const auto& blob : set->blobs()) {
             if (!blob) continue;
-
-            ARROW_RETURN_NOT_OK(blobset_index.Append(static_cast<int32_t>(iset)));
-            ARROW_RETURN_NOT_OK(slice_ident.Append(s_ident));
-            ARROW_RETURN_NOT_OK(slice_start.Append(s_start));
-            ARROW_RETURN_NOT_OK(blobset_ident.Append(bs_ident));
-            ARROW_RETURN_NOT_OK(blob_ident.Append(blob->ident()));
-            ARROW_RETURN_NOT_OK(value.Append(blob->value()));
-            ARROW_RETURN_NOT_OK(uncertainty.Append(blob->uncertainty()));
-            auto face = blob->face();
-            ARROW_RETURN_NOT_OK(face_ident.Append(face ? face->ident() : -1));
-
-            const auto& shape = blob->shape();
-
-            // Open this row's strips list; append every strip (all layers).
-            ARROW_RETURN_NOT_OK(strips_b.Append());
-            auto* s_layer = static_cast<arrow::Int32Builder*>(strip_sb->field_builder(0));
-            auto* s_lo    = static_cast<arrow::Int32Builder*>(strip_sb->field_builder(1));
-            auto* s_hi    = static_cast<arrow::Int32Builder*>(strip_sb->field_builder(2));
-            for (const auto& strip : shape.strips()) {
-                ARROW_RETURN_NOT_OK(strip_sb->Append());
-                ARROW_RETURN_NOT_OK(s_layer->Append(strip.layer));
-                ARROW_RETURN_NOT_OK(s_lo->Append(strip.bounds.first));
-                ARROW_RETURN_NOT_OK(s_hi->Append(strip.bounds.second));
-            }
-
-            // Open this row's corners list; each crossing is a pair of coords.
-            ARROW_RETURN_NOT_OK(corners_b.Append());
-            auto* c_l1 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(0));
-            auto* c_r1 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(1));
-            auto* c_l2 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(2));
-            auto* c_r2 = static_cast<arrow::Int32Builder*>(corner_sb->field_builder(3));
-            for (const auto& corner : shape.corners()) {
-                ARROW_RETURN_NOT_OK(corner_sb->Append());
-                ARROW_RETURN_NOT_OK(c_l1->Append(corner.first.layer));
-                ARROW_RETURN_NOT_OK(c_r1->Append(corner.first.grid));
-                ARROW_RETURN_NOT_OK(c_l2->Append(corner.second.layer));
-                ARROW_RETURN_NOT_OK(c_r2->Append(corner.second.grid));
-            }
-
-            ++nrows;
+            ARROW_RETURN_NOT_OK(b.append(static_cast<int32_t>(iset), s_ident, s_start, bs_ident, blob));
         }
     }
+    return b.finish();
+}
 
-    std::vector<std::shared_ptr<arrow::Array>> cols(10);
-    ARROW_RETURN_NOT_OK(blobset_index.Finish(&cols[0]));
-    ARROW_RETURN_NOT_OK(slice_ident.Finish(&cols[1]));
-    ARROW_RETURN_NOT_OK(slice_start.Finish(&cols[2]));
-    ARROW_RETURN_NOT_OK(blobset_ident.Finish(&cols[3]));
-    ARROW_RETURN_NOT_OK(blob_ident.Finish(&cols[4]));
-    ARROW_RETURN_NOT_OK(value.Finish(&cols[5]));
-    ARROW_RETURN_NOT_OK(uncertainty.Finish(&cols[6]));
-    ARROW_RETURN_NOT_OK(face_ident.Finish(&cols[7]));
-    ARROW_RETURN_NOT_OK(strips_b.Finish(&cols[8]));
-    ARROW_RETURN_NOT_OK(corners_b.Finish(&cols[9]));
-    return arrow::Table::Make(blobs_schema(), cols, nrows);
+arrow::Result<std::shared_ptr<arrow::Table>>
+to_arrow(const WireCell::ICluster::pointer& cluster)
+{
+    BlobRowBuilders b(arrow::default_memory_pool());
+    if (cluster) {
+        // Group the cluster's 'b' nodes by their slice; each slice is one blobset.
+        auto by_slice = WireCell::Aux::blobs_by_slice(cluster->graph());
+
+        // Deterministic blobset ordering: by slice start, then slice ident.
+        std::vector<WireCell::ISlice::pointer> slices;
+        slices.reserve(by_slice.size());
+        for (const auto& [slice, blobs] : by_slice) {
+            slices.push_back(slice);
+        }
+        std::sort(slices.begin(), slices.end(),
+                  [](const WireCell::ISlice::pointer& a, const WireCell::ISlice::pointer& c) {
+                      if (!a) return false;
+                      if (!c) return true;
+                      if (a->start() != c->start()) return a->start() < c->start();
+                      return a->ident() < c->ident();
+                  });
+
+        int32_t iset = 0;
+        for (const auto& slice : slices) {
+            const int32_t s_ident = slice ? slice->ident() : -1;
+            const double  s_start = slice ? slice->start() : 0.0;
+            // A cluster has no IBlobSet, so the slice ident stands in as the
+            // blobset ident (blobs of one slice form one blobset here).
+            const int32_t bs_ident = s_ident;
+            for (const auto& blob : by_slice.at(slice)) {
+                if (!blob) continue;
+                ARROW_RETURN_NOT_OK(b.append(iset, s_ident, s_start, bs_ident, blob));
+            }
+            ++iset;
+        }
+    }
+    return b.finish();
 }
 
 // ---------------------------------------------------------------------------
